@@ -1,0 +1,49 @@
+# --- Data (large, downloaded from external sources) -----------------------
+data/raw/
+data/*.duckdb
+data/*.duckdb.wal
+*.csv
+*.parquet
+!artifacts/**/*.csv
+
+# --- Go (api/) -------------------------------------------------------------
+api/bin/
+api/*.exe
+api/*.test
+api/vendor/
+
+# --- Node / SvelteKit (web/) -----------------------------------------------
+web/node_modules/
+web/.svelte-kit/
+web/build/
+web/.env
+web/.env.*
+!web/.env.example
+
+# --- R (training/) ---------------------------------------------------------
+training/.Rhistory
+training/.RData
+training/.Ruserdata
+training/.Rproj.user/
+training/renv/library/
+training/renv/local/
+training/renv/staging/
+training/_freeze/
+training/_site/
+training/*.html
+!training/model-card-template.html
+
+# --- Editors / OS ----------------------------------------------------------
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Secrets ---------------------------------------------------------------
+*.key
+*.pem
+.env
+.env.local
