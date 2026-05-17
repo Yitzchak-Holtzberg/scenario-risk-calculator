@@ -76,6 +76,11 @@ weights <- list(
   model_version = "unrest-risk-v0.1",
   fitted_at     = format(fit$fitted_at, "%Y-%m-%d"),
   train_years   = fit$train_years,
+  # Z-scores in country_snapshot were computed server-side using z_within
+  # (in training/_helpers.R) with this winsorize bound. The dashboard JS
+  # uses this constant to recompute z when sliders change, so server and
+  # client stay in sync via this single value.
+  winsorize_bound = 3,
   features      = features,
   feature_labels = as.list(c(
     civil_liberties            = "Civil liberties",

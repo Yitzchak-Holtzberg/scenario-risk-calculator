@@ -33,6 +33,7 @@ library(readxl)
 library(DBI)
 library(duckdb)
 library(countrycode)
+source("_helpers.R")
 ```
 
 ## Download
@@ -66,7 +67,7 @@ db_raw <- read_excel(xls_path)
 cat("Raw rows:", nrow(db_raw), " | Year range:", range(db_raw$year, na.rm = TRUE), "\n")
 
 # Convert COW to ISO3; keep only the columns we want.
-db_raw$iso3c <- countrycode(db_raw$ccode, "cown", "iso3c", warn = FALSE)
+db_raw$iso3c <- cow_to_iso3(db_raw$ccode)
 n_lost <- sum(is.na(db_raw$iso3c))
 cat("Rows without ISO3 (dropped):", n_lost, "\n")
 

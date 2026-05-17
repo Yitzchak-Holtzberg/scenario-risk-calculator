@@ -35,6 +35,7 @@ library(jsonlite)
 library(DBI)
 library(duckdb)
 library(ggplot2)
+source("_helpers.R")
 ```
 
 ## Fetch all origins, all years
@@ -129,26 +130,15 @@ cuba_recent
 #| fig-cap: "Cubans seeking refuge or asylum abroad, 2015 onward (UNHCR)"
 #| fig-width: 7
 #| fig-height: 4
-parchment <- "#F8F3E8"
-ink       <- "#2A2620"
-accent    <- "#1F3A60"
-
 ggplot(cuba_recent, aes(x = year, y = total_displaced)) +
-  geom_area(fill = accent, alpha = 0.25) +
-  geom_line(color = accent, linewidth = 0.9) +
-  geom_point(color = accent, size = 2.5) +
+  geom_area(fill = srs_palette$accent, alpha = 0.25) +
+  geom_line(color = srs_palette$accent, linewidth = 0.9) +
+  geom_point(color = srs_palette$accent, size = 2.5) +
   scale_x_continuous(breaks = cuba_recent$year) +
   scale_y_continuous(labels = scales::comma) +
   labs(x = NULL, y = "Refugees + asylum-seekers (origin: Cuba)",
        caption = "Source: UNHCR Refugee Statistics API") +
-  theme_minimal(base_family = "serif", base_size = 12) +
-  theme(plot.background  = element_rect(fill = parchment, color = NA),
-        panel.background = element_rect(fill = parchment, color = NA),
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(color = "#D8CFC0"),
-        axis.text        = element_text(color = ink),
-        axis.title       = element_text(color = ink),
-        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+  srs_theme()
 ```
 
 ## Cleanup

@@ -32,6 +32,7 @@ conflict" threshold is 25; we use 100 to bias toward larger episodes).
 library(DBI)
 library(duckdb)
 library(countrycode)
+source("_helpers.R")
 ```
 
 ## Download
@@ -68,7 +69,7 @@ cat("Raw events:", nrow(ucdp), " | Year range:", range(ucdp$year, na.rm = TRUE),
 
 ```{r}
 #| label: aggregate
-ucdp$iso3c <- countrycode(ucdp$country_id, "cown", "iso3c", warn = FALSE)
+ucdp$iso3c <- cow_to_iso3(ucdp$country_id)
 ucdp <- ucdp[!is.na(ucdp$iso3c), ]
 
 ucdp_annual <- aggregate(

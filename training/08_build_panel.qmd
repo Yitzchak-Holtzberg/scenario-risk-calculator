@@ -24,6 +24,7 @@ Output: `panel_features` table in `data/panel.duckdb`.
 library(DBI)
 library(duckdb)
 library(ggplot2)
+source("_helpers.R")
 ```
 
 ## Open the panel db
@@ -143,17 +144,9 @@ features <- c("civil_liberties", "freedom_expression", "regime_support_locus",
               "coup_proof_fragmentation", "counterbalancing", "politicization",
               "fariss_hr_score", "polity2")
 
-z_within <- function(x) {
-  if (sum(!is.na(x)) < 5) return(rep(NA_real_, length(x)))
-  m <- mean(x, na.rm = TRUE); s <- sd(x, na.rm = TRUE)
-  if (is.na(s) || s == 0) return(rep(0, length(x)))
-  # Winsorize at +/-3 SDs so a country with a tiny historical baseline
-  # (e.g. UK's near-zero refugee outflow) doesn't blow up to +3.5 when a
-  # small absolute number arrives. Caps extreme outliers without changing
-  # ordering for the bulk of the distribution.
-  z <- (x - m) / s
-  pmin(pmax(z, -3), 3)
-}
+# z_within is defined in _helpers.R (sourced above). Same function used
+# downstream by 12_export_artifacts.qmd if needed, and the dashboard's
+# `effectiveZValue` JS function mirrors the formula + winsorize bound.
 
 # Region-median imputation: for each (year, region), fill missing values
 # with the median of available values in that (year, region). Falls back to
@@ -243,11 +236,6 @@ dbGetQuery(con, "
 #| fig-cap: "Cuba indicator z-scores, 2015 onward — built panel coherence check"
 #| fig-width: 8
 #| fig-height: 5
-parchment <- "#F8F3E8"
-ink       <- "#2A2620"
-accent    <- "#1F3A60"
-crisis    <- "#8B2E2E"
-
 cuba_plot <- dbGetQuery(con, "
   SELECT year,
          z_civil_liberties   AS civil_liberties,
@@ -268,22 +256,15 @@ ggplot(cuba_long, aes(x = year, y = z, color = indicator)) +
   geom_line(linewidth = 0.8) +
   geom_point(size = 2) +
   scale_x_continuous(breaks = unique(cuba_long$year)) +
-  scale_color_manual(values = c(civil_liberties = accent,
+  scale_color_manual(values = c(civil_liberties = srs_palette$accent,
                                 gdp_growth      = "#5C7A93",
-                                refugee_outflow = crisis,
+                                refugee_outflow = srs_palette$crisis,
                                 food_price      = "#8B6F2B")) +
   labs(x = NULL, y = "z-score (within-country)",
        caption = "Source: V-Dem + WDI + UNHCR + FAO via panel.duckdb",
        color = NULL) +
-  theme_minimal(base_family = "serif", base_size = 12) +
-  theme(plot.background  = element_rect(fill = parchment, color = NA),
-        panel.background = element_rect(fill = parchment, color = NA),
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(color = "#D8CFC0"),
-        axis.text        = element_text(color = ink),
-        axis.title       = element_text(color = ink),
-        legend.position  = "bottom",
-        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+  srs_theme() +
+  ggplot2::theme(legend.position = "bottom")
 ```
 
 ## Cleanup

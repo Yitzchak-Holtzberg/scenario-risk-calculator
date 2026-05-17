@@ -38,6 +38,7 @@ library(vdemdata)
 library(DBI)
 library(duckdb)
 library(ggplot2)
+source("_helpers.R")
 ```
 
 ## Write to DuckDB
@@ -93,24 +94,13 @@ cuba_recent
 #| fig-cap: "Cuba's civil-liberties index, 2015 onward (V-Dem v16)"
 #| fig-width: 7
 #| fig-height: 4
-parchment <- "#F8F3E8"
-ink       <- "#2A2620"
-accent    <- "#1F3A60"
-
 ggplot(cuba_recent, aes(x = year, y = civil_liberties)) +
-  geom_line(color = accent, linewidth = 0.9) +
-  geom_point(color = accent, size = 2.5) +
+  geom_line(color = srs_palette$accent, linewidth = 0.9) +
+  geom_point(color = srs_palette$accent, size = 2.5) +
   scale_x_continuous(breaks = cuba_recent$year) +
   labs(x = NULL, y = "v2x_civlib (0–1)",
        caption = "Source: V-Dem v16 via vdemdata R package") +
-  theme_minimal(base_family = "serif", base_size = 12) +
-  theme(plot.background  = element_rect(fill = parchment, color = NA),
-        panel.background = element_rect(fill = parchment, color = NA),
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(color = "#D8CFC0"),
-        axis.text        = element_text(color = ink),
-        axis.title       = element_text(color = ink),
-        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+  srs_theme()
 ```
 
 ## Cleanup

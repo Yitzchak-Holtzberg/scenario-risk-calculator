@@ -27,6 +27,7 @@ library(readxl)
 library(DBI)
 library(duckdb)
 library(countrycode)
+source("_helpers.R")
 ```
 
 ## Download
@@ -49,7 +50,7 @@ polity <- read_excel(polity_local)
 cat("Columns (first 20):\n"); print(names(polity)[1:min(20, ncol(polity))])
 cat("\nRows:", nrow(polity), " | Year range:", range(polity$year, na.rm = TRUE), "\n")
 
-polity$iso3c <- countrycode(polity$ccode, "cown", "iso3c", warn = FALSE)
+polity$iso3c <- cow_to_iso3(polity$ccode)
 polity <- as.data.frame(polity)
 polity <- polity[!is.na(polity$iso3c), c("iso3c", "year", "polity2", "durable")]
 polity$year <- as.integer(polity$year)

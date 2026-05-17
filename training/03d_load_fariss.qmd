@@ -28,6 +28,7 @@ Source: Harvard Dataverse `doi:10.7910/DVN/RQ85GK` file `LHRS-v4.02-2021.csv`.
 library(DBI)
 library(duckdb)
 library(countrycode)
+source("_helpers.R")
 ```
 
 ## Download
@@ -51,7 +52,7 @@ cat("Columns:\n"); print(names(fariss))
 cat("\nRows:", nrow(fariss), " | Year range:", range(fariss$YEAR, na.rm = TRUE), "\n")
 
 # Convert COW code to ISO3. Fariss uses `COW` column.
-fariss$iso3c <- countrycode(fariss$COW, "cown", "iso3c", warn = FALSE)
+fariss$iso3c <- cow_to_iso3(fariss$COW)
 fariss <- fariss[!is.na(fariss$iso3c), c("iso3c", "YEAR", "theta_mean", "theta_sd")]
 names(fariss) <- c("iso3c", "year", "hr_score", "hr_score_sd")
 fariss$year <- as.integer(fariss$year)

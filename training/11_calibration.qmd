@@ -26,6 +26,7 @@ corresponds to a ~20% empirical rate.
 library(DBI)
 library(duckdb)
 library(ggplot2)
+source("_helpers.R")
 ```
 
 ## Load fitted model + holdout panel
@@ -110,26 +111,15 @@ reliability
 #| fig-cap: "Reliability diagram on 2023 holdout (predicted vs. actual unrest rate by decile)"
 #| fig-width: 6
 #| fig-height: 6
-parchment <- "#F8F3E8"
-ink       <- "#2A2620"
-accent    <- "#1F3A60"
-
 ggplot(reliability, aes(x = predicted, y = actual)) +
   geom_abline(slope = 1, intercept = 0, color = "#A89880", linetype = "dashed") +
-  geom_line(color = accent, linewidth = 0.8) +
-  geom_point(aes(size = n), color = accent) +
+  geom_line(color = srs_palette$accent, linewidth = 0.8) +
+  geom_point(aes(size = n), color = srs_palette$accent) +
   scale_size_continuous(range = c(2, 8), name = "n in bin") +
   coord_fixed(xlim = c(0, 1), ylim = c(0, 1)) +
   labs(x = "Mean predicted probability", y = "Empirical unrest rate",
        caption = "Diagonal = perfect calibration") +
-  theme_minimal(base_family = "serif", base_size = 12) +
-  theme(plot.background  = element_rect(fill = parchment, color = NA),
-        panel.background = element_rect(fill = parchment, color = NA),
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(color = "#D8CFC0"),
-        axis.text        = element_text(color = ink),
-        axis.title       = element_text(color = ink),
-        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+  srs_theme()
 ```
 
 ## Persist calibration results

@@ -28,6 +28,7 @@ informational but not part of the binary outcome.
 library(DBI)
 library(duckdb)
 library(countrycode)
+source("_helpers.R")
 ```
 
 ## Download
@@ -57,7 +58,7 @@ table(coups$event_type, useNA = "ifany")
 
 ```{r}
 #| label: aggregate
-coups$iso3c <- countrycode(coups$cowcode, "cown", "iso3c", warn = FALSE)
+coups$iso3c <- cow_to_iso3(coups$cowcode)
 coups <- coups[!is.na(coups$iso3c), ]
 
 # Cline's binary flag columns: realized=1 for successful, attempt=1 for

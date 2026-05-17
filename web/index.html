@@ -235,14 +235,14 @@
     <div class="disclaimer">
       <strong>v0 — Honest Limitations</strong>
       This is an experimental prototype, not a production forecasting tool. Brier skill score
-      ≈ 0.03 on holdout 2023 — meaningful signal, but the absolute probabilities are uncertain.
+      ≈ 0.05 on holdout 2023 — meaningful signal, but the absolute probabilities are uncertain.
       Rankings are more reliable than levels.
       <details>
         <summary>Data we'd want to add</summary>
         <ul>
           <li><strong>ACLED</strong> — protest/conflict events (blocked on Research-tier API access; requested 2026-05-15)</li>
-          <li><strong>Inflation, unemployment, GDP per capita</strong> — loaded from WDI but excluded from v0 model (median-imputing missing values introduced noise; proper imputation is v1 work)</li>
-          <li><strong>Fariss latent repression scores</strong> — alternative to V-Dem freedom indices</li>
+          <li><strong>GDP per capita</strong> — loaded from WDI but excluded from v0 model (sparse coverage for low-income countries; proper imputation is v1 work)</li>
+          <li><strong>Fariss latent repression scores &amp; Polity5</strong> — loaded into the panel but excluded from the v0 fit due to collinearity with V-Dem civil_liberties; revisit for v1</li>
           <li><strong>NELDA elections</strong> — election timing and manipulation</li>
           <li><strong>de Bruin security forces</strong> — loaded but coverage gaps (data ends 2010) prevent v0 use</li>
           <li><strong>Energy-crisis indicators</strong> (electricity per capita YoY, energy-import dependency)</li>
@@ -482,13 +482,10 @@
         const f = country.features[raw_name];
         const currentRaw = effectiveRawValue(country, raw_name);
         const rawDisplay = formatRaw(raw_name, currentRaw);
-        let zDisplay = '—';
-        let zValue = 0;
-        if (f.mean != null && f.sd != null && f.sd !== 0) {
-          zValue = (currentRaw - f.mean) / f.sd;
-          zValue = Math.max(-3, Math.min(3, zValue));
-          zDisplay = `${sign(zValue)}${zValue.toFixed(1)}σ`;
-        }
+        const zValue = (f.mean != null && f.sd != null && f.sd !== 0)
+          ? effectiveZValue(country, raw_name) : 0;
+        const zDisplay = (f.mean != null && f.sd != null && f.sd !== 0)
+          ? `${sign(zValue)}${zValue.toFixed(1)}σ` : '—';
         const modelInput = feat_name.startsWith('z_') ? zValue : currentRaw;
         const contribution = (coefs[feat_name] || 0) * modelInput;
         contribs.push({ feat_name, raw_name, rawDisplay, zDisplay, contribution });
@@ -545,10 +542,6 @@
                          "Log-transformed then z-scored vs country history.",
       z_political_violence_ord: "V-Dem ordinal (0–3): how much political violence occurred this year " +
                                 "relative to this country's recent history.",
-      z_fariss_hr_score: "Fariss latent human-rights score (item-response-theory model combining " +
-                         "Amnesty, State Dept, CIRI, PTS). Z-scored within country; higher = better.",
-      z_polity2:       "Polity5 score (−10 autocracy to +10 democracy). Independent of V-Dem; useful " +
-                       "cross-check. Z-scored within country.",
       z_ffpi_avg:      "FAO Food Price Index annual mean (2014–16 = 100). Z-scored — captures global " +
                        "food-price shock years (2008, 2011, 2022).",
       z_coup_proof_fragmentation: "Pilster-Böhmelt effective-number of military forces. Higher = " +
@@ -617,21 +610,38 @@
       return f.value;
     }
 
+    // Get the effective z-score for a feature in the current scoring
+    // scenario. Single source of truth on the client side: this function
+    // is called from both renderIndicators (display) and
+    // recomputeProbability (model scoring). The winsorize bound is read
+    // from weights.winsorize_bound so the server's z_within() helper in
+    // training/_helpers.R is the single source of truth for the bound.
+    //
+    // When no override is active (raw value === snapshot value), we use
+    // the server-precomputed z directly. When an override is active, we
+    // recompute z client-side using the country's stored mean + sd.
+    function effectiveZValue(country, raw_name) {
+      const f = country.features[raw_name];
+      const currentRaw = effectiveRawValue(country, raw_name);
+      if (currentRaw === f.value) return f.z;  // no override: trust server z
+      if (f.mean == null || !f.sd) return f.z;  // can't recompute, fall back
+      const bound = (weights && weights.winsorize_bound) || 3;
+      const z = (currentRaw - f.mean) / f.sd;
+      return Math.max(-bound, Math.min(bound, z));
+    }
+
     function recomputeProbability() {
       const country = snapshot.countries[currentISO];
       const stratum = weights.strata[country.regime_label];
       const featureValues = {};
       for (const feat_name of weights.features) {
         const raw_name = rawName(feat_name);
-        const f = country.features[raw_name];
-        const currentRaw = effectiveRawValue(country, raw_name);
-        if (feat_name.startsWith('z_')) {
-          let z = (currentRaw - f.mean) / (f.sd || 1);
-          z = Math.max(-3, Math.min(3, z));
-          featureValues[feat_name] = z;
-        } else {
-          featureValues[feat_name] = currentRaw;
-        }
+        // Level features (e.g. civil_liberties) feed raw value into the
+        // linear predictor; z-scored features feed the z. effectiveZValue
+        // and effectiveRawValue both handle override / Hanke logic.
+        featureValues[feat_name] = feat_name.startsWith('z_')
+          ? effectiveZValue(country, raw_name)
+          : effectiveRawValue(country, raw_name);
       }
       const p = scoreLinear(stratum.coefficients, stratum.feature_order, featureValues);
       const isScenario = Object.keys(scenarioOverrides).length > 0 || inflationSource === 'hanke';

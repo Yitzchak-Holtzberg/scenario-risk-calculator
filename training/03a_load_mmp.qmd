@@ -28,6 +28,7 @@ if it has any `large_protest` next year.
 library(DBI)
 library(duckdb)
 library(countrycode)
+source("_helpers.R")
 ```
 
 ## Download (Harvard Dataverse)
@@ -62,7 +63,7 @@ large_buckets <- c("1000s", "10000s", "100000s", "millions",
 
 mmp$is_large   <- mmp$participants_category %in% large_buckets
 mmp$is_violent <- mmp$protesterviolence == 1
-mmp$iso3c <- countrycode(mmp$ccode, "cown", "iso3c", warn = FALSE)
+mmp$iso3c <- cow_to_iso3(mmp$ccode)
 mmp <- mmp[!is.na(mmp$iso3c), ]
 
 mmp_annual <- aggregate(

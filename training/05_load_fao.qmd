@@ -23,6 +23,7 @@ year+month.
 library(DBI)
 library(duckdb)
 library(ggplot2)
+source("_helpers.R")
 ```
 
 ## Download
@@ -107,11 +108,6 @@ dbGetQuery(con, "
 #| fig-cap: "FAO Food Price Index (2014–2016 = 100), monthly, 1990 onward"
 #| fig-width: 8
 #| fig-height: 4.2
-parchment <- "#F8F3E8"
-ink       <- "#2A2620"
-accent    <- "#1F3A60"
-crisis    <- "#8B2E2E"
-
 ffpi <- dbGetQuery(con, "SELECT date, ffpi FROM fao ORDER BY date")
 ffpi$date <- as.Date(ffpi$date)
 
@@ -122,21 +118,14 @@ peaks <- data.frame(
 )
 
 ggplot(ffpi, aes(x = date, y = ffpi)) +
-  geom_line(color = accent, linewidth = 0.7) +
-  geom_point(data = peaks, color = crisis, size = 3) +
+  geom_line(color = srs_palette$accent, linewidth = 0.7) +
+  geom_point(data = peaks, color = srs_palette$crisis, size = 3) +
   geom_text(data = peaks, aes(label = label),
-            color = crisis, nudge_y = 8, family = "serif", fontface = "bold") +
+            color = srs_palette$crisis, nudge_y = 8, family = "serif", fontface = "bold") +
   scale_x_date(date_breaks = "5 years", date_labels = "%Y") +
   labs(x = NULL, y = "FAO Food Price Index (2014–2016 = 100)",
        caption = "Source: FAO Food Price Index") +
-  theme_minimal(base_family = "serif", base_size = 12) +
-  theme(plot.background  = element_rect(fill = parchment, color = NA),
-        panel.background = element_rect(fill = parchment, color = NA),
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(color = "#D8CFC0"),
-        axis.text        = element_text(color = ink),
-        axis.title       = element_text(color = ink),
-        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+  srs_theme()
 ```
 
 ## Cleanup

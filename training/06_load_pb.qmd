@@ -29,6 +29,7 @@ master `countries` table works.
 library(DBI)
 library(duckdb)
 library(countrycode)
+source("_helpers.R")
 ```
 
 ## Download
@@ -59,7 +60,7 @@ pb <- read.delim(pb_local, sep = "\t", stringsAsFactors = FALSE)
 cat("Raw rows:", nrow(pb), " | Year range:", range(pb$year, na.rm = TRUE), "\n")
 
 # Convert COW code to ISO3 so we can join to `countries`.
-pb$iso3c <- countrycode(pb$ccode, "cown", "iso3c", warn = FALSE)
+pb$iso3c <- cow_to_iso3(pb$ccode)
 n_lost <- sum(is.na(pb$iso3c))
 cat("Rows without ISO3 (dropped):", n_lost, "\n")
 

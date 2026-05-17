@@ -32,6 +32,7 @@ library(WDI)
 library(DBI)
 library(duckdb)
 library(ggplot2)
+source("_helpers.R")
 ```
 
 ## Indicators
@@ -102,27 +103,15 @@ cuba_recent
 #| fig-cap: "Cuba's GDP growth, 2015 onward (World Bank WDI)"
 #| fig-width: 7
 #| fig-height: 4
-parchment <- "#F8F3E8"
-ink       <- "#2A2620"
-accent    <- "#1F3A60"
-crisis    <- "#8B2E2E"
-
 ggplot(cuba_recent, aes(x = year, y = gdp_growth)) +
   geom_hline(yintercept = 0, color = "#A89880", linewidth = 0.4) +
-  geom_line(color = accent, linewidth = 0.9) +
+  geom_line(color = srs_palette$accent, linewidth = 0.9) +
   geom_point(aes(color = gdp_growth < -5), size = 2.5) +
-  scale_color_manual(values = c(`FALSE` = accent, `TRUE` = crisis), guide = "none") +
+  scale_color_manual(values = c(`FALSE` = srs_palette$accent, `TRUE` = srs_palette$crisis), guide = "none") +
   scale_x_continuous(breaks = cuba_recent$year) +
   labs(x = NULL, y = "GDP growth (annual %)",
        caption = "Source: World Bank WDI via WDI R package") +
-  theme_minimal(base_family = "serif", base_size = 12) +
-  theme(plot.background  = element_rect(fill = parchment, color = NA),
-        panel.background = element_rect(fill = parchment, color = NA),
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(color = "#D8CFC0"),
-        axis.text        = element_text(color = ink),
-        axis.title       = element_text(color = ink),
-        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+  srs_theme()
 ```
 
 ## Cleanup
