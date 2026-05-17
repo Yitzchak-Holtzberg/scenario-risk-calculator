@@ -1,0 +1,124 @@
+{
+  "model_version": "unrest-risk-v0.1",
+  "fitted_at": "2026-05-17",
+  "train_years": [1995, 2022],
+  "features": ["civil_liberties", "z_gdp_growth", "z_refugee_outflow", "z_political_violence_ord", "z_ffpi_avg", "z_coup_proof_fragmentation"],
+  "feature_labels": {
+    "civil_liberties": "Civil liberties",
+    "z_gdp_growth": "GDP growth",
+    "z_refugee_outflow": "Refugee outflow",
+    "z_political_violence_ord": "Political violence",
+    "z_ffpi_avg": "Global food prices",
+    "z_coup_proof_fragmentation": "Coup-proofing fragmentation"
+  },
+  "feature_direction": {
+    "civil_liberties": -1,
+    "z_gdp_growth": -1,
+    "z_refugee_outflow": 1,
+    "z_political_violence_ord": 1,
+    "z_ffpi_avg": 1,
+    "z_coup_proof_fragmentation": -1
+  },
+  "strata": {
+    "closed_autocracy": {
+      "regime_code": 0,
+      "coefficients": {
+        "(Intercept)": -0.607355,
+        "civil_liberties": -2.218476,
+        "z_gdp_growth": -0.189763,
+        "z_refugee_outflow": 0.178184,
+        "z_political_violence_ord": 0.291047,
+        "z_ffpi_avg": -0.192469,
+        "z_coup_proof_fragmentation": 0.029922
+      },
+      "vcov": [
+        [0.026856, -0.060875, 0.000697, 0.000127, -0.002403, 0.001983, 0.000192],
+        [-0.060875, 0.212572, 0.000065, -0.002439, -0.000862, 0.002586, 0.000194],
+        [0.000697, 0.000065, 0.008602, 0.000589, 0.000235, 0.000276, -0.000539],
+        [0.000127, -0.002439, 0.000589, 0.010796, -0.002818, -0.003977, -0.000388],
+        [-0.002403, -0.000862, 0.000235, -0.002818, 0.012613, 0.000911, -0.001608],
+        [0.001983, 0.002586, 0.000276, -0.003977, 0.000911, 0.010171, 0.000587],
+        [0.000192, 0.000194, -0.000539, -0.000388, -0.001608, 0.000587, 0.009278]
+      ],
+      "feature_order": ["(Intercept)", "civil_liberties", "z_gdp_growth", "z_refugee_outflow", "z_political_violence_ord", "z_ffpi_avg", "z_coup_proof_fragmentation"],
+      "n_train": 752,
+      "deviance": 767.839846,
+      "null_deviance": 813.576795
+    },
+    "electoral_autocracy": {
+      "regime_code": 1,
+      "coefficients": {
+        "(Intercept)": 0.123438,
+        "civil_liberties": -1.722535,
+        "z_gdp_growth": -0.001149,
+        "z_refugee_outflow": 0.043057,
+        "z_political_violence_ord": 0.371378,
+        "z_ffpi_avg": 0.069778,
+        "z_coup_proof_fragmentation": 0.014468
+      },
+      "vcov": [
+        [0.026481, -0.045036, -0.000061, 0.000588, -0.000225, 0.00024, 0.000471],
+        [-0.045036, 0.0868, -0.000041, -0.000484, -0.000903, -0.000057, -0.001032],
+        [-0.000061, -0.000041, 0.003006, 0.000014, 0.000375, -4.878037e-06, -0.000015],
+        [0.000588, -0.000484, 0.000014, 0.003781, -0.000776, -0.0007, 0.000253],
+        [-0.000225, -0.000903, 0.000375, -0.000776, 0.004026, -0.000023, 0.000086],
+        [0.00024, -0.000057, -4.878037e-06, -0.0007, -0.000023, 0.003479, -0.000197],
+        [0.000471, -0.001032, -0.000015, 0.000253, 0.000086, -0.000197, 0.003987]
+      ],
+      "feature_order": ["(Intercept)", "civil_liberties", "z_gdp_growth", "z_refugee_outflow", "z_political_violence_ord", "z_ffpi_avg", "z_coup_proof_fragmentation"],
+      "n_train": 1626,
+      "deviance": 1962.780186,
+      "null_deviance": 2038.096773
+    },
+    "electoral_democracy": {
+      "regime_code": 2,
+      "coefficients": {
+        "(Intercept)": 9.138826,
+        "civil_liberties": -13.003592,
+        "z_gdp_growth": -0.15163,
+        "z_refugee_outflow": 0.185615,
+        "z_political_violence_ord": 0.301813,
+        "z_ffpi_avg": 0.297436,
+        "z_coup_proof_fragmentation": 0.150315
+      },
+      "vcov": [
+        [0.585344, -0.731322, -0.00315, 0.001865, -0.001753, 0.012811, 0.003758],
+        [-0.731322, 0.922598, 0.004294, -0.002114, 0.0029, -0.016334, -0.005377],
+        [-0.00315, 0.004294, 0.006118, 0.000218, -0.000135, -0.000677, -0.000028],
+        [0.001865, -0.002114, 0.000218, 0.007639, -0.000753, -0.001658, -0.00029],
+        [-0.001753, 0.0029, -0.000135, -0.000753, 0.009557, -5.840589e-06, -0.00089],
+        [0.012811, -0.016334, -0.000677, -0.001658, -5.840589e-06, 0.006711, -3.923979e-06],
+        [0.003758, -0.005377, -0.000028, -0.00029, -0.00089, -3.923979e-06, 0.008014]
+      ],
+      "feature_order": ["(Intercept)", "civil_liberties", "z_gdp_growth", "z_refugee_outflow", "z_political_violence_ord", "z_ffpi_avg", "z_coup_proof_fragmentation"],
+      "n_train": 1419,
+      "deviance": 1154.502767,
+      "null_deviance": 1420.69642
+    },
+    "liberal_democracy": {
+      "regime_code": 3,
+      "coefficients": {
+        "(Intercept)": 7.182371,
+        "civil_liberties": -9.93671,
+        "z_gdp_growth": -0.107704,
+        "z_refugee_outflow": 0.070143,
+        "z_political_violence_ord": 0.131543,
+        "z_ffpi_avg": -0.157739,
+        "z_coup_proof_fragmentation": -0.129663
+      },
+      "vcov": [
+        [4.389782, -4.727489, -0.007332, 0.019302, 0.007852, -0.03453, 0.003492],
+        [-4.727489, 5.102743, 0.008654, -0.020034, -0.007995, 0.03893, -0.001534],
+        [-0.007332, 0.008654, 0.0095, 0.00012, 0.001332, 0.001275, -0.000018],
+        [0.019302, -0.020034, 0.00012, 0.011985, 0.000702, -0.00193, -0.000936],
+        [0.007852, -0.007995, 0.001332, 0.000702, 0.016552, -0.000959, -0.000402],
+        [-0.03453, 0.03893, 0.001275, -0.00193, -0.000959, 0.011362, -0.000558],
+        [0.003492, -0.001534, -0.000018, -0.000936, -0.000402, -0.000558, 0.013643]
+      ],
+      "feature_order": ["(Intercept)", "civil_liberties", "z_gdp_growth", "z_refugee_outflow", "z_political_violence_ord", "z_ffpi_avg", "z_coup_proof_fragmentation"],
+      "n_train": 1099,
+      "deviance": 757.265305,
+      "null_deviance": 778.671134
+    }
+  }
+}

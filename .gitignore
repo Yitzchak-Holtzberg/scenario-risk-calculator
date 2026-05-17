@@ -21,9 +21,9 @@ web/build/
 web/.env
 web/.env.*
 !web/.env.example
-# Local-dev copy of frozen artifacts; canonical files live in top-level
-# artifacts/. Copy when serving locally:  cp artifacts/*.json web/artifacts/
-web/artifacts/
+# Note: web/artifacts/ is committed (duplicate of top-level artifacts/) so
+# GitHub Pages can serve the dashboard as a self-contained directory.
+# After re-rendering 12_export_artifacts, copy artifacts/*.json -> web/artifacts/.
 
 # --- R (training/) ---------------------------------------------------------
 training/.Rhistory

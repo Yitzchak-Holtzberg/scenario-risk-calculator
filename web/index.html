@@ -128,6 +128,58 @@
 
     .loading { text-align: center; padding: 80px 0; color: var(--ink-muted); font-style: italic; }
     .error { color: var(--positive); padding: 24px; border: 1px solid var(--positive); background: #FFF5F0; }
+
+    /* Disclaimer banner */
+    .disclaimer {
+      background: #FBF4E6;
+      border: 1px solid #C9A86A;
+      border-left: 3px solid #8B6F2B;
+      padding: 14px 18px;
+      margin-bottom: 32px;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--ink);
+    }
+    .disclaimer strong { color: #8B6F2B; text-transform: uppercase; font-size: 11px; letter-spacing: 0.15em; display: block; margin-bottom: 6px; }
+    .disclaimer details { margin-top: 8px; }
+    .disclaimer details summary {
+      color: var(--accent); cursor: pointer; font-style: italic;
+      text-decoration: underline; text-decoration-style: dotted;
+      text-underline-offset: 3px;
+    }
+    .disclaimer details summary:hover { text-decoration-style: solid; }
+    .disclaimer details[open] summary { margin-bottom: 10px; }
+    .disclaimer ul { margin-left: 18px; margin-top: 6px; }
+    .disclaimer li { margin-bottom: 3px; }
+
+    /* Mini contribution bar */
+    .contrib-bar {
+      position: relative;
+      width: 100%;
+      height: 4px;
+      background: var(--border-subtle);
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: visible;
+    }
+    .contrib-bar .midline {
+      position: absolute; left: 50%; top: -3px; bottom: -3px;
+      width: 1px; background: var(--ink-muted); opacity: 0.4;
+    }
+    .contrib-bar .fill {
+      position: absolute; top: 0; bottom: 0;
+      border-radius: 2px;
+    }
+    .contrib-bar .fill.up   { background: var(--positive); left: 50%; }
+    .contrib-bar .fill.down { background: var(--negative); right: 50%; }
+    .indicator-row.has-bar { padding-bottom: 8px; }
+    .indicator-row .name-with-info {
+      display: flex; align-items: baseline; gap: 6px;
+    }
+    .indicator-row .info {
+      color: var(--ink-muted); cursor: help; font-size: 12px;
+      border-bottom: 1px dotted var(--ink-muted);
+    }
   </style>
 </head>
 <body>
@@ -137,6 +189,26 @@
       <h1>Scenario Risk Calculator</h1>
       <p class="subtitle">Sustained mass unrest — 12-month horizon</p>
     </header>
+
+    <div class="disclaimer">
+      <strong>v0 — Honest Limitations</strong>
+      This is an experimental prototype, not a production forecasting tool. Brier skill score
+      ≈ 0.03 on holdout 2023 — meaningful signal, but the absolute probabilities are uncertain.
+      Rankings are more reliable than levels.
+      <details>
+        <summary>Data we'd want to add</summary>
+        <ul>
+          <li><strong>ACLED</strong> — protest/conflict events (blocked on Research-tier API access; requested 2026-05-15)</li>
+          <li><strong>Inflation, unemployment, GDP per capita</strong> — loaded from WDI but excluded from v0 model (median-imputing missing values introduced noise; proper imputation is v1 work)</li>
+          <li><strong>Fariss latent repression scores</strong> — alternative to V-Dem freedom indices</li>
+          <li><strong>NELDA elections</strong> — election timing and manipulation</li>
+          <li><strong>de Bruin security forces</strong> — loaded but coverage gaps (data ends 2010) prevent v0 use</li>
+          <li><strong>Energy-crisis indicators</strong> (electricity per capita YoY, energy-import dependency)</li>
+          <li><strong>Country-level food security</strong> (FAO SFSI; currently only have global FFPI)</li>
+          <li><strong>Internet shutdowns</strong> (Access Now KeepItOn)</li>
+        </ul>
+      </details>
+    </div>
 
     <div id="root">
       <div class="loading">Loading frozen artifacts…</div>
@@ -330,23 +402,12 @@
       const stratum = weights.strata[country.regime_label];
       const coefs = stratum.coefficients;
 
-      // Header row
-      const rows = [
-        `<div class="indicator-row header">
-          <div class="name">Indicator</div>
-          <div class="value">Value</div>
-          <div class="z">vs own past</div>
-          <div class="direction">Direction</div>
-        </div>`
-      ];
-
+      // Compute contributions for ALL features first, so we can scale the bar widths
+      const contribs = [];
       for (const feat_name of weights.features) {
         const raw_name = rawName(feat_name);
         const f = country.features[raw_name];
         const currentRaw = scenarioOverrides[raw_name] !== undefined ? scenarioOverrides[raw_name] : f.value;
-
-        // Always compute BOTH: the raw value (for display) and the z (for context).
-        // Model contribution uses whichever one the feature is defined as.
         const rawDisplay = formatRaw(raw_name, currentRaw);
         let zDisplay = '—';
         let zValue = 0;
@@ -355,25 +416,64 @@
           zValue = Math.max(-3, Math.min(3, zValue));
           zDisplay = `${sign(zValue)}${zValue.toFixed(1)}σ`;
         }
-
-        // Model contribution: level features use raw, z features use z
         const modelInput = feat_name.startsWith('z_') ? zValue : currentRaw;
         const contribution = (coefs[feat_name] || 0) * modelInput;
-        const direction = contribution > 0.10 ? 'up' : contribution < -0.10 ? 'down' : 'neutral';
+        contribs.push({ feat_name, raw_name, rawDisplay, zDisplay, contribution });
+      }
+      const maxAbs = Math.max(0.5, ...contribs.map(c => Math.abs(c.contribution)));
+
+      const rows = [
+        `<div class="indicator-row header">
+          <div class="name">Indicator</div>
+          <div class="value">Value</div>
+          <div class="z">vs own past</div>
+          <div class="direction">Effect</div>
+        </div>`
+      ];
+
+      for (const c of contribs) {
+        const direction = c.contribution > 0.10 ? 'up' : c.contribution < -0.10 ? 'down' : 'neutral';
         const arrow = direction === 'up' ? '▲' : direction === 'down' ? '▼' : '·';
         const verb = direction === 'up' ? 'raises' : direction === 'down' ? 'lowers' : 'neutral';
-
+        const barWidth = Math.min(50, Math.abs(c.contribution) / maxAbs * 50);
+        const barFill = direction === 'up'
+          ? `<div class="fill up" style="width:${barWidth}%"></div>`
+          : direction === 'down'
+          ? `<div class="fill down" style="width:${barWidth}%"></div>`
+          : '';
+        const tip = INDICATOR_TOOLTIPS[c.feat_name] || '';
+        const label = weights.feature_labels[c.feat_name];
+        const nameHtml = tip
+          ? `<span class="info" title="${tip}">${label}</span>`
+          : label;
         rows.push(
-          `<div class="indicator-row">
-            <div class="name">${weights.feature_labels[feat_name]}</div>
-            <div class="value">${rawDisplay}</div>
-            <div class="z">${zDisplay}</div>
+          `<div class="indicator-row has-bar">
+            <div>${nameHtml}
+              <div class="contrib-bar"><div class="midline"></div>${barFill}</div>
+            </div>
+            <div class="value">${c.rawDisplay}</div>
+            <div class="z">${c.zDisplay}</div>
             <div class="direction direction-${direction}"><span class="arrow">${arrow}</span>${verb}</div>
            </div>`
         );
       }
       document.getElementById('indicators').innerHTML = rows.join('');
     }
+
+    const INDICATOR_TOOLTIPS = {
+      civil_liberties: "V-Dem civil-liberties index (0–1). Captures freedom of association, " +
+                       "expression, movement. Higher = more free.",
+      z_gdp_growth:    "Annual GDP growth from World Bank WDI. Z-scored vs this country's own " +
+                       "history; negative = unusual contraction.",
+      z_refugee_outflow: "Total refugees + asylum seekers originating from this country (UNHCR). " +
+                         "Log-transformed then z-scored vs country history.",
+      z_political_violence_ord: "V-Dem ordinal (0–3): how much political violence occurred this year " +
+                                "relative to this country's recent history.",
+      z_ffpi_avg:      "FAO Food Price Index annual mean (2014–16 = 100). Z-scored — captures global " +
+                       "food-price shock years (2008, 2011, 2022).",
+      z_coup_proof_fragmentation: "Pilster-Böhmelt effective-number of military forces. Higher = " +
+                                  "more fragmented security sector (coup-proofed); lower = unified."
+    };
 
     function renderSliders(country) {
       const sliders = [];
@@ -471,18 +571,58 @@
     function methodologyHtml() {
       const c = calibration;
       return `
-        <p>Four separate logistic regressions — one per V-Dem RoW regime category (closed autocracy, electoral autocracy,
-           electoral democracy, liberal democracy) — predict the probability that a country experiences a sustained
-           mass-mobilization event in the next 12 months. Outcome is V-Dem's <code>v2cagenmob_ord ≥ 2</code> at year+1.</p>
-        <p>Features are z-scored within each country, so the model interprets shocks relative to the country's own
-           history rather than global benchmarks. Coefficients and variance-covariance matrices are frozen as JSON;
-           the dashboard recomputes scenario probabilities client-side from sliders.</p>
-        <p><strong>Sources:</strong> V-Dem v16 (governance), World Bank WDI (economics), UNHCR Refugee Statistics
-           (refugee outflows), FAO Food Price Index (global food-price pressure).</p>
-        <p><strong>Holdout calibration (${c.holdout_year}, n=${c.n_holdout}):</strong>
-           Brier score ${c.brier.toFixed(4)} (baseline ${c.brier_baseline.toFixed(4)}; skill score ${c.brier_skill_score.toFixed(3)}),
-           log loss ${c.log_loss.toFixed(4)}.</p>
-        <p><strong>Train window:</strong> ${weights.train_years[0]}–${weights.train_years[1]}. <strong>Holdout:</strong> ${c.holdout_year}.</p>
+        <h3 style="font-size:15px; font-weight:600; margin-top:16px; margin-bottom:8px;">What we predict</h3>
+        <p>For each country: the probability of sustained mass unrest within the next 12 months,
+           where "unrest" means at least one of (a) a coup attempt, (b) ≥100 fatalities in armed-conflict
+           events, (c) a mass-mobilization event with ≥1,000 protesters, or (d) V-Dem's
+           <code>v2cagenmob_ord ≥ 4</code> classification (the latter only as a fallback after MMP ends in 2020).</p>
+
+        <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">How</h3>
+        <p>Four separate logistic regressions — one per V-Dem Regimes-of-the-World category (closed
+           autocracy, electoral autocracy, electoral democracy, liberal democracy). The intercept captures
+           the baseline rate for that regime type; coefficients say how much each indicator nudges the
+           probability up or down.</p>
+        <p><strong>Features:</strong> civil_liberties is used as a raw 0–1 level (so the model sees that UK
+           = 0.88 ≠ Cuba = 0.30 in absolute terms). The other features are z-scored within country
+           (winsorized at ±3 SDs) so the model interprets each shock relative to the country's own history.
+           refugee_outflow is log-transformed before z-scoring because its raw distribution is heavily
+           skewed.</p>
+
+        <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">Sources</h3>
+        <ul style="margin-left:16px; margin-top:4px;">
+          <li><strong>V-Dem v16</strong> (Coppedge et al.) — governance, civil liberties, mass-mobilization ordinal</li>
+          <li><strong>World Bank WDI</strong> — GDP growth and other economic indicators</li>
+          <li><strong>UNHCR Refugee Statistics</strong> — origin-side refugee + asylum-seeker counts</li>
+          <li><strong>FAO Food Price Index</strong> — monthly global FFPI, averaged to annual</li>
+          <li><strong>Pilster-Böhmelt</strong> via Harvard Dataverse — coup-proofing structure (effective-number of forces)</li>
+          <li><strong>Mass Mobilization Project</strong> (Clark & Regan) — large-protest events 1990–2020</li>
+          <li><strong>UCDP GED v25.1</strong> (Uppsala) — armed-conflict fatalities 1989–2024</li>
+          <li><strong>Cline Center Coup d'État Project</strong> — coup attempts 1945–2026</li>
+        </ul>
+
+        <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">Calibration</h3>
+        <p><strong>Holdout year ${c.holdout_year}, n=${c.n_holdout} country-years.</strong>
+           Brier score <code>${c.brier.toFixed(4)}</code> (baseline of always predicting the base rate:
+           <code>${c.brier_baseline.toFixed(4)}</code>; skill score
+           <code>${c.brier_skill_score.toFixed(3)}</code>).
+           Log loss <code>${c.log_loss.toFixed(4)}</code>.</p>
+        <p style="font-style:italic; color: var(--ink-muted); font-size:14px;">
+           A skill score of ${c.brier_skill_score.toFixed(2)} means the model is ~${(c.brier_skill_score*100).toFixed(1)}%
+           better than always predicting the regime's base rate. Published instability-forecasting
+           models typically sit in 0.05–0.15 range with much larger feature sets. We're in the
+           lower end of credible — honest about it.</p>
+
+        <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">What this model can't do</h3>
+        <ul style="margin-left:16px; margin-top:4px;">
+          <li>Predict <strong>black swans</strong> — Tunisia 2011, Sri Lanka 2022 — by definition unprecedented</li>
+          <li>Predict <strong>short-horizon shifts</strong> — features are annual, so we can't detect monthly escalations</li>
+          <li>Capture <strong>country-specific dynamics</strong> not in our 6 features (e.g., specific dynasty politics, religious/ethnic tensions)</li>
+          <li>Be a <strong>policy recommendation</strong> — it's a probability estimate, not a prescription</li>
+        </ul>
+
+        <p style="margin-top:20px; font-size:13px; color: var(--ink-muted);">
+          Train window: ${weights.train_years[0]}–${weights.train_years[1]}.
+          Model version: ${weights.model_version}, fitted ${weights.fitted_at}.</p>
       `;
     }
 

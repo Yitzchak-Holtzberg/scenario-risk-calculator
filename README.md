@@ -109,9 +109,33 @@ The dashboard reads `../artifacts/*.json` directly. To refresh after re-training
 
 ## Current model state (honest)
 
-- **Brier skill score 0.01** — model is barely better than predicting the base rate. Outcome threshold (`>=2`) is too loose; base rates run 47–60% across regimes. Tighten to `>=3` for "many large events" to lift signal.
-- **Missing data**: ACLED, Pilster-Böhmelt, de Bruin. These would unlock 3 more indicator concepts shown in the mocks (elite split, security-force defection, sharper unrest counts). Pipeline is built to absorb them as additions.
+- **Brier skill score ≈ 0.03** on 2023 holdout — meaningful signal but modest. Published instability-forecasting work hits 0.05–0.15 with larger feature sets. We're at the lower end of credible.
+- **Country rankings are more reliable than absolute probabilities**: Russia 72%, Iran 62%, Cuba 22%, USA 40%, Switzerland 12%. Rank order matches political-risk intuition; the exact percentages should be treated as estimates with wide uncertainty (90% CIs are baked into each prediction).
 - **Country-year, not country-month**: every covariate is annual. Country-month would forward-fill 12 identical rows per year — no information added. When ACLED arrives, we revisit.
+
+## Roadmap — what we still want to add
+
+These would push the model from "v0 prototype" to "credible v1."
+
+| Priority | Source | Why | Status |
+|---|---|---|---|
+| 🔴 High | **ACLED** (protest/conflict events) | The canonical political-risk event source. Replaces V-Dem proxy outcome with real-time event counts. Currently using ACLED-equivalents (MMP, UCDP, Cline) but ACLED is the gold standard. | Blocked on Research-tier API access; applied 2026-05-15 |
+| 🟠 Medium | **WDI extras as features** — inflation, unemployment, GDP/capita | Already loaded in `wdi` table. Excluded from v0 model because countries with data gaps (Cuba doesn't report CPI) got median-imputed synthetic values that introduced noise. | v1: proper country-specific imputation (carry-forward, regional median) |
+| 🟠 Medium | **de Bruin State Security Forces** | Already loaded. Coverage ends 2010 → forward-fill required. Would give us elite-split and security-force-defection features that the mock dashboard promises. | v1: median imputation or country-specific carry-forward |
+| 🟠 Medium | **Energy crisis indicators** (electricity per capita YoY, energy-import dependency) | Mock dashboard's "Energy crisis" indicator concept. WDI has some of these; IEA has more (most behind paywall). | Not yet loaded |
+| 🟡 Low | **Country-level food security** (FAO Suite of Food Security Indicators) | We have global FAO FFPI; country-level food security would replace the global signal with country-specific. | Not yet loaded |
+| 🟡 Low | **Fariss latent repression scores** | Alternative to V-Dem civil_liberties; uses different methodology (latent variable model). Useful as cross-check. | Not yet loaded |
+| 🟡 Low | **NELDA elections** | Election timing + manipulation. Critical for forecasting electoral-cycle dynamics. | Not yet loaded |
+| 🟡 Low | **Internet shutdowns** (Access Now KeepItOn) | Real-time indicator of regime repression. Niche but informative. | Not yet loaded |
+| 🟡 Low | **GDELT events** | News-derived events at daily granularity. Massive data volume (TB-scale); useful for monthly granularity when we revisit country-month. | Not yet loaded |
+
+## Modeling improvements queued for v1
+
+- **Country-specific imputation** — replace global-median imputation (which homogenizes too much) with carry-forward / regional median / chained equations
+- **Ridge regression** — let the model use both `civil_liberties` and `freedom_expression` without collinear sign-flip (currently dropped one because of this)
+- **Country-month granularity** — revisit when ACLED comes online with event-level frequency
+- **Hierarchical model** — Bayesian partial pooling across regions/regimes instead of strict stratification
+- **Calibration recipe** — Platt scaling or isotonic regression on the holdout to tighten the predicted probabilities
 
 ## License
 
