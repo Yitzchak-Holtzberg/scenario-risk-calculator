@@ -1,0 +1,34 @@
+# Curated mapping: prediction-market contracts -> country-outcome cells in the model
+# Hand-maintained. Each row maps ONE active market to ONE (iso3c, outcome_type, resolution_year).
+# A market can map to multiple countries (one row each) — see UKR+RUS rows for the same peace-deal market.
+#
+# Columns:
+#   iso3c            ISO 3166-1 alpha-3 country code (must exist in `countries` table)
+#   outcome_type     coup | regime_change | armed_conflict | protest
+#   resolution_year  year the market resolves; should align with the model's snapshot_year + 1
+#   source           polymarket | kalshi
+#   market_id        polymarket slug, OR kalshi event_ticker
+#   direction        yes_raises_risk | yes_lowers_risk
+#                    (e.g., peace deal YES → lower future unrest; coup attempt YES → higher)
+#   question         human-readable market question (snapshot at curation time; reference only)
+#   notes            optional curator notes
+#
+# Curation rules (v0):
+#   1. Prefer one market per (iso3c, outcome_type, resolution_year) cell. If multiple horizons
+#      exist (May 31 / June 30 / end of year), pick the one closest to a 12-month horizon.
+#   2. Skip markets that don't map to coup/conflict/protest (e.g., election outcomes in
+#      stable democracies — Starmer being voted out is not "unrest" as the model defines it).
+#   3. Multi-outcome markets (e.g., Venezuela "who will lead") get a single row with notes
+#      describing how the loader should aggregate.
+#   4. Re-check this file quarterly — markets resolve and disappear; new ones spawn.
+#
+iso3c,outcome_type,resolution_year,source,market_id,direction,question,notes
+IRN,regime_change,2026,polymarket,will-the-iranian-regime-fall-by-the-end-of-2026,yes_raises_risk,Will the Iranian regime fall before 2027?,12-month horizon; YES implies coup/uprising/collapse
+IRN,armed_conflict,2026,polymarket,will-the-us-invade-iran-before-2027,yes_raises_risk,Will the U.S. invade Iran before 2027?,US invasion would trigger UCDP >=100 fatality label
+TWN,armed_conflict,2026,polymarket,will-china-invade-taiwan-before-2027,yes_raises_risk,Will China invade Taiwan by end of 2026?,Invasion triggers armed-conflict label for TWN
+UKR,armed_conflict,2026,polymarket,ukraine-signs-peace-deal-with-russia-before-2027,yes_lowers_risk,Ukraine signs peace deal with Russia before 2027?,Peace deal lowers UKR next-year armed-conflict risk
+RUS,armed_conflict,2026,polymarket,ukraine-signs-peace-deal-with-russia-before-2027,yes_lowers_risk,Ukraine signs peace deal with Russia before 2027?,Same contract; mapped to RUS as well
+CUB,armed_conflict,2026,polymarket,will-the-us-invade-cuba-in-2026,yes_raises_risk,Will the U.S. invade Cuba in 2026?,Low-probability speculative contract; include for completeness
+ISR,regime_change,2026,kalshi,KXKNESSET-27,yes_raises_risk,Will the Israeli parliament be dissolved?,Knesset dissolution as instability proxy
+IRN,regime_change,2026,kalshi,KXIRANDEMOCRACY-27MAR01,yes_raises_risk,Will Iran become a democracy in 2026?,Kalshi cross-check on Polymarket regime-fall signal; same direction
+VEN,regime_change,2026,kalshi,KXVENEZDEFACTO-27JAN01,yes_raises_risk,Who will de facto lead Venezuela at the end of 2026?,"Multi-outcome event; loader computes 1 - P(Maduro continues) as the risk-aligned probability"
