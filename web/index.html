@@ -83,13 +83,23 @@
     .picker-item:last-child { border-bottom: none; }
     .picker-empty { padding: 16px; text-align: center; color: var(--ink-muted); font-style: italic; font-size: 14px; }
 
-    .probability { text-align: center; padding: 56px 0; margin: 32px 0 48px; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
-    .probability .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--ink-muted); font-weight: 600; margin-bottom: 24px; }
-    .probability .big-number { font-size: 104px; font-weight: 600; line-height: 1; letter-spacing: -0.025em; color: var(--ink); }
-    .probability .ci { margin-top: 24px; font-size: 17px; font-style: italic; color: var(--ink-muted); }
+    .probability { text-align: center; padding: 40px 0; margin: 32px 0 48px; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
+    .probability .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--ink-muted); font-weight: 600; margin-bottom: 12px; }
+    .probability .big-number { font-size: 80px; font-weight: 600; line-height: 1; letter-spacing: -0.025em; color: var(--ink); }
+    .probability .ci { margin-top: 16px; font-size: 15px; font-style: italic; color: var(--ink-muted); }
     .probability.recomputed .big-number { color: var(--accent); }
     .probability .scenario-note { display: none; margin-top: 16px; font-size: 13px; color: var(--accent); font-style: italic; }
     .probability.recomputed .scenario-note { display: block; }
+    .probability.two-tier { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding-left: 24px; padding-right: 24px; }
+    .probability.two-tier .tier-block { padding: 0 8px; }
+    .probability.two-tier #tier-violence { border-left: 1px dashed var(--border-subtle); }
+    .probability.two-tier .tier-hint { font-size: 11px; color: var(--ink-muted); font-style: italic; margin-bottom: 16px; max-width: 320px; margin-left: auto; margin-right: auto; }
+    .probability.two-tier .scenario-note { grid-column: 1 / -1; }
+    .probability.two-tier .benchmark-row { grid-column: 1 / -1; }
+    @media (max-width: 720px) {
+      .probability.two-tier { grid-template-columns: 1fr; }
+      .probability.two-tier #tier-violence { border-left: none; border-top: 1px dashed var(--border-subtle); padding-top: 24px; }
+    }
     .benchmark-row {
       margin-top: 22px;
       padding-top: 18px;
@@ -121,6 +131,9 @@
       padding: 14px 0;
       border-bottom: 1px solid var(--border-subtle);
     }
+    .indicator-row.two-tier {
+      grid-template-columns: minmax(140px, 1fr) 110px 1fr 1fr;
+    }
     .indicator-row .name { font-size: 16px; }
     .indicator-row .value {
       text-align: right;
@@ -129,6 +142,13 @@
       color: var(--ink);
     }
     .indicator-row .direction { text-align: right; font-style: italic; font-size: 14px; color: var(--ink-muted); }
+    .indicator-row .contrib-col {
+      display: flex; align-items: center; gap: 8px;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-muted);
+    }
+    .indicator-row .contrib-col .contrib-bar.small { flex: 1; height: 8px; }
+    .indicator-row .contrib-col .contrib-num { min-width: 48px; text-align: right; }
+    .indicator-row .contrib-col .contrib-zero { color: var(--ink-muted); opacity: 0.4; font-style: italic; }
     .indicator-row.header { padding: 8px 0; }
     .indicator-row.header > div {
       font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
@@ -299,8 +319,10 @@
       return sigmoid(lp);
     }
 
-    function activeModel(country) {
-      return weights.pooled || weights.strata[country.regime_label];
+    // v0.6: weights ships two tiers (mobilization, violence). Each tier
+    // has its own pooled + per-regime models. Pass the tier name explicitly.
+    function activeModel(tierName) {
+      return weights.tiers[tierName].pooled;
     }
 
     // ------- main app -------
@@ -378,16 +400,25 @@
 
         <div class="body-grid">
           <div class="left-col">
-            <section class="probability" id="prob-section">
-              <div class="label">Probability of mass unrest, next 12 months</div>
-              <div class="big-number num" id="big-number">${fmt(country.predicted_probability)}</div>
-              <div class="ci">90% CI: <span class="num">${fmt(country.ci_lo_90)}</span> – <span class="num">${fmt(country.ci_hi_90)}</span></div>
-              <div class="scenario-note">Scenario-adjusted point estimate (CI shown for current snapshot only)</div>
+            <section class="probability two-tier" id="prob-section">
+              <div class="tier-block" id="tier-mobilization">
+                <div class="label">Probability of mass mobilization, next 12 months</div>
+                <div class="tier-hint">Protest / demonstration at country-defining scale (≥0.1% of pop or V-Dem v2cagenmob_ord ≥4)</div>
+                <div class="big-number num" id="big-number-mobilization">${fmt(country.mobilization.probability)}</div>
+                <div class="ci">90% CI: <span class="num">${fmt(country.mobilization.ci_lo_90)}</span> – <span class="num">${fmt(country.mobilization.ci_hi_90)}</span></div>
+              </div>
+              <div class="tier-block" id="tier-violence">
+                <div class="label">Probability of armed violence / coup, next 12 months</div>
+                <div class="tier-hint">UCDP fatalities ≥100 or Cline Center coup attempt</div>
+                <div class="big-number num" id="big-number-violence">${fmt(country.violence.probability)}</div>
+                <div class="ci">90% CI: <span class="num">${fmt(country.violence.ci_lo_90)}</span> – <span class="num">${fmt(country.violence.ci_hi_90)}</span></div>
+              </div>
+              <div class="scenario-note">Scenario-adjusted point estimates (CIs shown for current snapshot only)</div>
               ${viewsOverlay && viewsOverlay.countries && viewsOverlay.countries[currentISO] ? `
                 <div class="benchmark-row" title="${viewsOverlay.outcome_note || ''}">
-                  <span class="benchmark-label"><a href="${viewsOverlay.source_url}" target="_blank" rel="noopener">ViEWS</a></span>
+                  <span class="benchmark-label"><a href="${viewsOverlay.source_url}" target="_blank" rel="noopener">ViEWS benchmark (armed conflict)</a></span>
                   <span class="benchmark-value num">${fmt(viewsOverlay.countries[currentISO].probability)}</span>
-                  <span class="benchmark-meta">armed conflict only · ${viewsOverlay.window_start} – ${viewsOverlay.window_end} · run ${viewsOverlay.run_id.split('_').slice(1,3).join('.')}</span>
+                  <span class="benchmark-meta">${viewsOverlay.window_start} – ${viewsOverlay.window_end} · run ${viewsOverlay.run_id.split('_').slice(1,3).join('.')}</span>
                 </div>` : ''}
             </section>
 
@@ -488,57 +519,67 @@
     }
 
     function renderReference(country) {
-      const r = baseRates.regimes[country.regime_label];
-      const baseRatePct = (r.base_rate * 100).toFixed(1);
+      const rMob = baseRates.tiers.mobilization[country.regime_label];
+      const rVio = baseRates.tiers.violence[country.regime_label];
+      if (!rMob || !rVio) {
+        document.getElementById('reference-body').innerHTML = '';
+        return;
+      }
+      const trainYears = weights.tiers.mobilization.train_years;
       document.getElementById('reference-body').innerHTML =
-        `Based on <span class="num">${r.n_obs}</span> <strong>${country.regime_label.replace(/_/g, ' ')}</strong> `
-        + `country-years, training window <span class="num">${weights.train_years[0]}–${weights.train_years[1]}</span>. `
-        + `Base rate in reference class: <span class="num">${baseRatePct}%</span>.`;
+        `Based on <strong>${country.regime_label.replace(/_/g, ' ')}</strong> country-years, `
+        + `training window <span class="num">${trainYears[0]}–${trainYears[1]}</span>. `
+        + `Base rates in this reference class: `
+        + `<span class="num">${(rMob.base_rate * 100).toFixed(1)}%</span> mobilization, `
+        + `<span class="num">${(rVio.base_rate * 100).toFixed(1)}%</span> violence.`;
     }
 
     function renderIndicators(country) {
-      const model = activeModel(country);
-      const coefs = model.coefficients;
+      const coefsMob = activeModel('mobilization').coefficients;
+      const coefsVio = activeModel('violence').coefficients;
 
       const contribs = [];
       for (const feat_name of weights.features) {
         const currentRaw = effectiveRawValue(country, feat_name);
         const rawDisplay = formatRaw(feat_name, currentRaw);
-        const contribution = (coefs[feat_name] || 0) * currentRaw;
-        contribs.push({ feat_name, rawDisplay, contribution });
+        const c_mob = (coefsMob[feat_name] || 0) * currentRaw;
+        const c_vio = (coefsVio[feat_name] || 0) * currentRaw;
+        contribs.push({ feat_name, rawDisplay, c_mob, c_vio });
       }
-      const maxAbs = Math.max(0.5, ...contribs.map(c => Math.abs(c.contribution)));
+      const maxAbs = Math.max(0.5,
+        ...contribs.flatMap(c => [Math.abs(c.c_mob), Math.abs(c.c_vio)])
+      );
 
       const rows = [
-        `<div class="indicator-row header">
+        `<div class="indicator-row two-tier header">
           <div class="name">Indicator</div>
           <div class="value">Value</div>
-          <div class="direction">Effect</div>
+          <div class="contrib-col">Mobilization</div>
+          <div class="contrib-col">Violence</div>
         </div>`
       ];
 
+      const barCell = (contrib) => {
+        if (contrib === 0) return `<span class="contrib-zero">—</span>`;
+        const dir = contrib > 0 ? 'up' : 'down';
+        const width = Math.min(50, Math.abs(contrib) / maxAbs * 50);
+        const fill = `<div class="fill ${dir}" style="width:${width}%"></div>`;
+        return `<div class="contrib-bar small"><div class="midline"></div>${fill}</div>
+                <span class="contrib-num">${contrib > 0 ? '+' : ''}${contrib.toFixed(2)}</span>`;
+      };
+
       for (const c of contribs) {
-        const direction = c.contribution > 0.10 ? 'up' : c.contribution < -0.10 ? 'down' : 'neutral';
-        const arrow = direction === 'up' ? '▲' : direction === 'down' ? '▼' : '·';
-        const verb = direction === 'up' ? 'raises' : direction === 'down' ? 'lowers' : 'neutral';
-        const barWidth = Math.min(50, Math.abs(c.contribution) / maxAbs * 50);
-        const barFill = direction === 'up'
-          ? `<div class="fill up" style="width:${barWidth}%"></div>`
-          : direction === 'down'
-          ? `<div class="fill down" style="width:${barWidth}%"></div>`
-          : '';
         const tip = INDICATOR_TOOLTIPS[c.feat_name] || '';
         const label = weights.feature_labels[c.feat_name];
         const nameHtml = tip
           ? `<span class="info" title="${tip}">${label}</span>`
           : label;
         rows.push(
-          `<div class="indicator-row has-bar">
-            <div>${nameHtml}
-              <div class="contrib-bar"><div class="midline"></div>${barFill}</div>
-            </div>
+          `<div class="indicator-row two-tier">
+            <div class="name">${nameHtml}</div>
             <div class="value">${c.rawDisplay}</div>
-            <div class="direction direction-${direction}"><span class="arrow">${arrow}</span>${verb}</div>
+            <div class="contrib-col">${barCell(c.c_mob)}</div>
+            <div class="contrib-col">${barCell(c.c_vio)}</div>
            </div>`
         );
       }
@@ -560,7 +601,7 @@
       unemployment:    "Unemployment % of labor force, World Bank WDI.",
       log_refugee_outflow: "log1p(refugees + asylum seekers) originating from this country, UNHCR. " +
                            "Log-transformed for cross-country comparability.",
-      political_violence_ord: "V-Dem ordinal (0–4) capturing how much political violence occurred this year.",
+      political_violence_ord_lag1: "V-Dem ordinal (0–4) capturing political violence in the PRIOR year. Lagged by 1 year so it's not concurrent with the outcome label.",
       coup_proof_fragmentation: "Pilster-Böhmelt effective-number of military forces. Higher = " +
                                 "more fragmented security sector (coup-proofed); lower = unified."
     };
@@ -577,7 +618,7 @@
       gdp_growth:               { lo: -25,   hi: 20,   step: 0.1  },
       cpi_inflation:            { lo: -10,   hi: 200,  step: 0.5  },
       unemployment:             { lo: 0,     hi: 40,   step: 0.1  },
-      political_violence_ord:   { lo: 0,     hi: 4,    step: 1    },
+      political_violence_ord_lag1:   { lo: 0,     hi: 4,    step: 1    },
       log_refugee_outflow:      { lo: 0,     hi: 16,   step: 0.1  },
       coup_proof_fragmentation: { lo: 0.5,   hi: 5,    step: 0.05 }
     };
@@ -631,14 +672,16 @@
 
     function recomputeProbability() {
       const country = snapshot.countries[currentISO];
-      const model = activeModel(country);
       const featureValues = {};
       for (const feat_name of weights.features) {
         featureValues[feat_name] = effectiveRawValue(country, feat_name);
       }
-      const p = scoreLinear(model.coefficients, model.feature_order, featureValues);
+      for (const tier of ['mobilization', 'violence']) {
+        const m = activeModel(tier);
+        const p = scoreLinear(m.coefficients, m.feature_order, featureValues);
+        document.getElementById('big-number-' + tier).textContent = fmt(p);
+      }
       const isScenario = Object.keys(scenarioOverrides).length > 0 || inflationSource === 'hanke';
-      document.getElementById('big-number').textContent = fmt(p);
       document.getElementById('prob-section').classList.toggle('recomputed', isScenario);
     }
 
@@ -646,7 +689,7 @@
       if (value == null) return '—';
       const pctFeatures = ['gdp_growth', 'cpi_inflation', 'unemployment'];
       const intFeatures = ['conflict_neighbors_count'];
-      const ordinals    = ['political_violence_ord', 'loser_consent'];
+      const ordinals    = ['political_violence_ord_lag1', 'loser_consent'];
       if (pctFeatures.includes(feat_name)) return value.toFixed(2) + '%';
       if (intFeatures.includes(feat_name)) return Math.round(value).toLocaleString();
       if (feat_name === 'civil_liberties') return value.toFixed(2);
@@ -657,25 +700,32 @@
     }
 
     function methodologyHtml() {
-      const c = calibration;
+      const cMob = calibration.tiers.mobilization;
+      const cVio = calibration.tiers.violence;
       return `
         <h3 style="font-size:15px; font-weight:600; margin-top:16px; margin-bottom:8px;">What we predict</h3>
-        <p>For each country: the probability of sustained mass unrest within the next 12 months,
-           where "unrest" means at least one of (a) a coup attempt, (b) ≥100 fatalities in armed-conflict
-           events, (c) a mass-mobilization event with ≥1,000 protesters, or (d) V-Dem's
-           <code>v2cagenmob_ord ≥ 4</code> classification (the latter only as a fallback after MMP ends in 2020).</p>
+        <p>For each country, two separate probabilities for the next 12 months:</p>
+        <ul style="margin-left:16px; margin-top:4px;">
+          <li><strong>Mobilization</strong> — at least one of: an MMP-recorded protest with participants
+              ≥0.1% of population (calibrated to Iran 2022 Woman-Life-Freedom baseline), OR V-Dem
+              <code>v2cagenmob_ord ≥ 4</code> ("mass mobilization was a defining feature of the year").
+              Captures protest-scale unrest in stable democracies and ramping autocracies alike.</li>
+          <li><strong>Armed violence / coup</strong> — at least one of: ≥100 fatalities in
+              state-based armed conflict (UCDP GED), OR a Cline Center coup attempt.
+              Captures civil-war-grade violence and regime-change attempts.</li>
+        </ul>
 
         <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">How</h3>
-        <p>The headline forecast uses one pooled <strong>LASSO logistic regression</strong> trained
-           on 1995–2022 country-years. Every feature enters as a <strong>raw cross-country level</strong>
-           (no within-country z-scoring) — the model answers "given a country with these characteristics,
-           what fraction of similar country-years in history saw sustained mass unrest the following year?"
-           This is the PITF/Goldstone framing.</p>
-        <p><strong>Features:</strong> civil liberties (V-Dem 0–1), log GDP per capita, election-loser
-           consent (V-Dem 0–4), regional conflict count, GDP growth %, CPI inflation % (clipped to
-           [−10, 200] to handle hyperinflation tails), unemployment %, political violence ordinal (0–4),
-           log refugee outflow, and Pilster-Böhmelt coup-proofing fragmentation.
-           Per-regime models are retained in the artifact for within-regime reference-class context.</p>
+        <p>Two separate pooled <strong>LASSO logistic regressions</strong> (one per outcome tier)
+           trained on 1995–2022 country-years. Each tier has its own coefficients — the same features
+           predict each outcome but with different weights, because protest and armed conflict are
+           empirically distinct processes. Features enter as <strong>raw cross-country levels</strong>
+           (no within-country z-scoring) under <strong>monotonicity constraints</strong> that force
+           each coefficient to its substantively-correct sign. This is the PITF/Goldstone framing.</p>
+        <p><strong>Features (10 total):</strong> civil liberties (V-Dem 0–1), log GDP per capita,
+           election-loser consent (V-Dem 0–4), regional conflict count, GDP growth %, CPI inflation %
+           (clipped to [−10, 200]), unemployment %, political violence ordinal LAGGED 1 year (0–4),
+           log refugee outflow, and Pilster-Böhmelt coup-proofing fragmentation.</p>
 
         <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">Sources</h3>
         <ul style="margin-left:16px; margin-top:4px;">
@@ -691,17 +741,20 @@
           <li><strong>Polity5</strong> — loaded into the panel; excluded from the current fit (collinearity with V-Dem civil_liberties)</li>
         </ul>
 
-        <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">Calibration</h3>
-        <p><strong>Holdout year ${c.holdout_year}, n=${c.n_holdout} country-years.</strong>
-           Brier score <code>${c.brier.toFixed(4)}</code> (baseline of always predicting the base rate:
-           <code>${c.brier_baseline.toFixed(4)}</code>; skill score
-           <code>${c.brier_skill_score.toFixed(3)}</code>).
-           Log loss <code>${c.log_loss.toFixed(4)}</code>.</p>
+        <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">Calibration (2023 holdout)</h3>
+        <p><strong>Mobilization tier</strong> (n=${cMob.n_holdout}, base rate ${(cMob.base_rate*100).toFixed(1)}%):
+           Brier <code>${cMob.brier.toFixed(4)}</code> · skill score
+           <code>${cMob.brier_skill_score.toFixed(3)}</code> · log loss <code>${cMob.log_loss.toFixed(4)}</code>.</p>
+        <p><strong>Armed violence / coup tier</strong> (n=${cVio.n_holdout}, base rate ${(cVio.base_rate*100).toFixed(1)}%):
+           Brier <code>${cVio.brier.toFixed(4)}</code> · skill score
+           <code>${cVio.brier_skill_score.toFixed(3)}</code> · log loss <code>${cVio.log_loss.toFixed(4)}</code>.</p>
         <p style="font-style:italic; color: var(--ink-muted); font-size:14px;">
-           A skill score of ${c.brier_skill_score.toFixed(2)} means the model is ~${(c.brier_skill_score*100).toFixed(1)}%
-           better than always predicting the regime's base rate. Published instability-forecasting
-           models typically sit in 0.05–0.15 range with much larger feature sets. We're in the
-           lower end of credible — honest about it.</p>
+          The contrast is real: armed violence is structurally predictable from country features
+          (conflict-ridden countries stay conflict-ridden); mass mobilization is harder because
+          protests are noisy, triggered by specific local events, and weakly correlated with
+          structural features at the 1-year horizon. A negative skill on mobilization means
+          the model does worse than always predicting the base rate — we report it honestly.
+        </p>
 
         <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">What this model can't do</h3>
         <ul style="margin-left:16px; margin-top:4px;">

@@ -1,8 +1,8 @@
 # Scenario Risk Calculator
 
-Country-level political-risk forecasting tool. A pooled LASSO logistic model on raw cross-country feature levels writes frozen JSON artifacts for a static dashboard. The user picks a country, sees a 12-month probability of sustained mass unrest with a 90% CI, and moves sliders to explore scenarios.
+Country-level political-risk forecasting tool. **Two pooled LASSO logistic models** on raw cross-country feature levels write frozen JSON artifacts for a static dashboard. The user picks a country, sees two separate 12-month probabilities — `P(mobilization)` and `P(armed violence/coup)` — with 90% CIs, and moves sliders to explore scenarios.
 
-**v0 question**: *Given this country's structural and economic characteristics, what fraction of historical country-years with similar values experienced sustained mass unrest the following year?* (The PITF/Goldstone 2010 framing.)
+**v0 question**: *Given this country's structural and economic characteristics, what fraction of historical country-years with similar values experienced (a) mass mobilization next year, or (b) armed conflict / coup attempt next year?* (The PITF/Goldstone 2010 framing, stratified into two outcome tiers because protest and armed conflict are empirically distinct processes.)
 
 ## Stack (v0 reality)
 
@@ -81,12 +81,12 @@ scenario-risk-calculator/
 
 ## Forecast definition (v0)
 
-**Outcome** (`unrest_next_year`, in `09_label_events.qmd`): flag a country-year if *any* of the following fires in the **following** year:
+**Two outcome tiers** (in `09_label_events.qmd`), each predicted separately by its own LASSO:
 
-- Cline Center: 1+ coup attempt (realized or attempted)
-- UCDP GED: 100+ conflict fatalities
-- MMP: 1+ large protest where **participants ≥ 0.1% of population** (per-capita threshold, calibrated to Iran 2022 Woman-Life-Freedom protest baseline; catches Yellow Vests 2018, HK 2019, Iceland 2008, USA BLM 2020, Iran 2009 Green Movement; excludes routine 1k-vigil events in large countries)
-- V-Dem fallback (post-2020 only, since MMP ends in 2020): `v2cagenmob_ord ≥ 4`
+- `outcome_mobilization` — fires if **either** (a) MMP-recorded protest with participants ≥0.1% of population (per-capita threshold, calibrated to Iran 2022 Woman-Life-Freedom baseline; catches Yellow Vests, HK 2019, Iceland 2008, BLM 2020, Iran 2009 Green Movement) **or** (b) V-Dem `v2cagenmob_ord ≥ 4` ("mass mobilization was a defining feature of the year"; post-2020 fallback for MMP).
+- `outcome_violence` — fires if **either** (a) UCDP GED records 100+ fatalities in state-based armed conflict **or** (b) Cline Center records a coup attempt (realized or attempted).
+
+`unrest_next_year` is kept as a legacy column (OR of both tiers) for backwards compatibility but the headline forecasts are the two tiers separately.
 
 Multi-source fusion protects against any single source's quirks. ACLED, when access arrives, will replace the MMP + UCDP proxy. Earlier v0 attempts used V-Dem `v2cagenmob_ord ≥ 2` alone, which produced flat base rates (47–60% across regimes) because the ordinal is too broad.
 
@@ -150,7 +150,10 @@ GitHub Pages deploys `web/` automatically on push to `main` (see `.github/workfl
 
 ## Current model state (honest)
 
-- **v0.5 Brier skill score = 0.255** on 2023 holdout (n=144, base rate 22.9%). Brier 0.131 vs always-predict-base-rate baseline 0.177. Down ~0.02 from v0.4.1's 0.276 — that's the price of imposing monotonicity constraints and lagging the autocorrelated feature. Still ~3× v0.3's 0.085.
+- **v0.6 Brier skill score (2023 holdout)**:
+  - **Mobilization tier**: **−0.05** (n=144, base rate 11.8%). The model does *worse* than always predicting the base rate. Honest finding — mass protest is genuinely hard to predict at 1-year horizon from structural country features alone. Protests are noisy, triggered by specific local events (a court ruling, a single death, a price hike), and weakly correlated with the slow-moving features in our panel.
+  - **Armed violence / coup tier**: **+0.45** (n=122, base rate 18.0%). Highly predictable. Conflict-ridden countries stay conflict-ridden; the structural fingerprint of armed violence is strong and persistent.
+  - The contrast validates the two-tier split. v0.5's single fused outcome was averaging these two distinct processes and producing a 0.255 skill that hid the gap. The new framing makes the limitation explicit: we can predict regime-threatening violence reasonably well, and we should not pretend to predict mass mobilization with the same confidence.
 - **Face validity restored**: Cuba 34.6% > USA 26.6%. The v0.4.1 inversion (USA 39% > Cuba 32%) is gone because v0.5's monotonicity constraints zero out `civil_liberties`'s sign-flipped contribution (the "more civil liberties → more reported unrest" reporting-bias artifact). Country rankings now match political-risk intuition top to bottom.
 - **`political_violence_ord` is lagged by 1 year**. v0.4 used the concurrent V-Dem violence ordinal as a predictor, but our outcome label includes the V-Dem `v2cagenmob_ord >= 4` fallback for post-2020 years — concurrent violence partly predicts itself. Lagging breaks the autocorrelation.
 - **Monotonicity constraints** force every coefficient to its substantively-justified sign: `civil_liberties ≤ 0`, `cpi_inflation ≥ 0`, `unemployment ≥ 0`, etc. Reporting bias can no longer flip signs. Features that lose their predictive power when forced to the right sign get zeroed out (cpi_inflation, unemployment, civil_liberties, log_gdp_per_cap, loser_consent all sit at β = 0). **This is an honest empirical finding**: at the 1-year horizon, those features don't add predictive value beyond prior political violence — consistent with PITF/Goldstone literature (economic shocks predict 2-3 year horizons).

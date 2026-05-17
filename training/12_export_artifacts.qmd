@@ -13,15 +13,17 @@ execute:
 Writes JSON files to `../artifacts/` that the static dashboard consumes.
 Math runs in the browser — no backend at runtime.
 
-- **`weights.json`** — coefficients + vcov per regime stratum + pooled; feature list
-- **`base_rates.json`** — per-regime base rates from training data
+- **`weights.json`** — coefficients + vcov per tier (mobilization, violence),
+  with both pooled and per-regime models
+- **`base_rates.json`** — per-regime base rates from training data, per tier
 - **`country_snapshot.json`** — per-country: regime, latest raw feature
-  values, predicted probability + 90% CI, per-feature contribution
-- **`calibration.json`** — Brier, log loss, reliability bins
+  values, predicted probability + 90% CI **for each tier**, per-feature
+  contribution per tier
+- **`calibration.json`** — Brier, log loss, reliability bins per tier
 
-v0.4: features are raw cross-country levels (no z-scoring). Sliders in the
-dashboard bind directly to raw values. No `winsorize_bound`, no z↔raw
-conversion, no within-country mean/sd shipped to the client.
+v0.6: two-tier outcome stratification. Each country has two probabilities —
+P(mobilization) for protest/demonstration scale and P(violence) for armed
+conflict/coup risk.
 
 ## Libraries
 
@@ -36,11 +38,10 @@ library(jsonlite)
 
 ```{r}
 #| label: load
-fit <- readRDS("../data/model/fit.rds")
-models       <- fit$models
-pooled_model <- fit$pooled_model
-features     <- fit$features
-regime_labels <- fit$regime_labels
+fit             <- readRDS("../data/model/fit.rds")
+tiers           <- fit$tiers
+features        <- fit$features
+regime_labels   <- fit$regime_labels
 calibration_obj <- readRDS("../data/model/calibration.rds")
 
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
@@ -50,80 +51,80 @@ dbDisconnect(con, shutdown = TRUE)
 
 ## Build weights.json
 
-For each fitted stratum, store the coefficients and the variance-covariance
-matrix. The dashboard samples from `MVN(coef, vcov)` to compute 90% CIs on
-predictions.
+Two tiers; each tier has pooled + per-regime strata.
 
 ```{r}
 #| label: weights
-strata <- list()
-for (k in names(models)) {
-  fit_k <- models[[k]]
-  # Ridge fits store the cv.glmnet coefficients +
-  # bootstrap-derived empirical covariance directly on the model list,
-  # since glmnet has no closed-form vcov(). Dashboard's MVN sampling for
-  # 90% CIs works the same way - sample from MVN(coef, vcov) and apply.
-  co <- fit_k$coefficients
-  vc <- fit_k$vcov
-  strata[[regime_labels[[k]]]] <- list(
-    regime_code   = as.integer(k),
-    coefficients  = as.list(co),
-    vcov          = unname(as.matrix(vc)),
-    feature_order = fit_k$feature_order,
-    n_train       = fit_k$n_train,
-    n_events      = fit_k$n_events,
-    lambda        = fit_k$lambda,
-    n_bootstrap   = fit_k$n_bootstrap
+feature_labels <- as.list(c(
+  civil_liberties             = "Civil liberties",
+  log_gdp_per_cap             = "GDP per capita",
+  loser_consent               = "Loser consent",
+  conflict_neighbors_count    = "Regional conflict",
+  gdp_growth                  = "GDP growth",
+  cpi_inflation               = "Inflation",
+  unemployment                = "Unemployment",
+  political_violence_ord_lag1 = "Political violence (prior year)",
+  log_refugee_outflow         = "Refugee outflow (log)",
+  coup_proof_fragmentation    = "Coup-proofing fragmentation"
+))
+feature_direction <- as.list(c(   # +1 = higher value raises risk, -1 = lowers
+  civil_liberties             = -1,
+  log_gdp_per_cap             = -1,
+  loser_consent               = -1,
+  conflict_neighbors_count    = +1,
+  gdp_growth                  = -1,
+  cpi_inflation               = +1,
+  unemployment                = +1,
+  political_violence_ord_lag1 = +1,
+  log_refugee_outflow         = +1,
+  coup_proof_fragmentation    = +1
+))
+
+build_tier_weights <- function(tier) {
+  strata <- list()
+  for (k in names(tier$models)) {
+    fit_k <- tier$models[[k]]
+    strata[[regime_labels[[k]]]] <- list(
+      regime_code   = as.integer(k),
+      coefficients  = as.list(fit_k$coefficients),
+      vcov          = unname(as.matrix(fit_k$vcov)),
+      feature_order = fit_k$feature_order,
+      n_train       = fit_k$n_train,
+      n_events      = fit_k$n_events,
+      lambda        = fit_k$lambda,
+      n_bootstrap   = fit_k$n_bootstrap
+    )
+  }
+  list(
+    strata = strata,
+    pooled = list(
+      coefficients  = as.list(tier$pooled_model$coefficients),
+      vcov          = unname(as.matrix(tier$pooled_model$vcov)),
+      feature_order = tier$pooled_model$feature_order,
+      lambda        = tier$pooled_model$lambda,
+      n_train       = tier$pooled_model$n_train,
+      n_events      = tier$pooled_model$n_events,
+      n_bootstrap   = tier$pooled_model$n_bootstrap
+    ),
+    train_years = tier$train_years
   )
 }
 
-# IMPORTANT: pass named vectors as `as.list()` so jsonlite emits JSON objects
-# with the names as keys. Plain named vectors get unboxed to arrays and lose
-# their names, which breaks the dashboard's `weights.feature_labels[z_name]`
-# lookups (they'd return undefined).
 weights <- list(
-  model_version = fit$model_version,
-  fitted_at     = format(fit$fitted_at, "%Y-%m-%d"),
-  train_years   = fit$train_years,
-  features      = features,
-  feature_labels = as.list(c(
-    civil_liberties          = "Civil liberties",
-    log_gdp_per_cap          = "GDP per capita",
-    loser_consent            = "Loser consent",
-    conflict_neighbors_count = "Regional conflict",
-    gdp_growth               = "GDP growth",
-    cpi_inflation            = "Inflation",
-    unemployment             = "Unemployment",
-    political_violence_ord   = "Political violence",
-    log_refugee_outflow      = "Refugee outflow (log)",
-    coup_proof_fragmentation = "Coup-proofing fragmentation"
-  )),
-  feature_direction = as.list(c(   # +1 = higher value raises risk, -1 = lowers
-    civil_liberties          = -1,
-    log_gdp_per_cap          = -1,
-    loser_consent            = -1,
-    conflict_neighbors_count = +1,
-    gdp_growth               = -1,
-    cpi_inflation            = +1,
-    unemployment             = +1,
-    political_violence_ord   = +1,
-    log_refugee_outflow      = +1,
-    coup_proof_fragmentation = -1
-  )),
-  strata = strata,
-  pooled = list(
-    coefficients  = as.list(pooled_model$coefficients),
-    vcov          = unname(as.matrix(pooled_model$vcov)),
-    feature_order = pooled_model$feature_order,
-    lambda        = pooled_model$lambda,
-    n_train       = pooled_model$n_train,
-    n_events      = pooled_model$n_events,
-    n_bootstrap   = pooled_model$n_bootstrap
+  model_version    = fit$model_version,
+  fitted_at        = format(fit$fitted_at, "%Y-%m-%d"),
+  features         = features,
+  feature_labels   = feature_labels,
+  feature_direction = feature_direction,
+  tiers = list(
+    mobilization = build_tier_weights(tiers$mobilization),
+    violence     = build_tier_weights(tiers$violence)
   )
 )
 
 dir.create("../artifacts", showWarnings = FALSE, recursive = TRUE)
-write_json(weights, "../artifacts/weights.json", auto_unbox = TRUE, pretty = TRUE, digits = 6)
+write_json(weights, "../artifacts/weights.json",
+           auto_unbox = TRUE, pretty = TRUE, digits = 6)
 cat("Wrote artifacts/weights.json\n")
 ```
 
@@ -131,48 +132,45 @@ cat("Wrote artifacts/weights.json\n")
 
 ```{r}
 #| label: base-rates
-features_check <- c("regime_type", "unrest_next_year", features)
-train_idx <- complete.cases(panel[, features_check]) & panel$year <= 2022
-train <- panel[train_idx, ]
-
-base_rates <- list()
-for (k in 0:3) {
-  stratum <- train[train$regime_type == k, ]
-  if (nrow(stratum) == 0) next
-  base_rates[[regime_labels[[as.character(k)]]]] <- list(
-    regime_code = k,
-    n_obs       = nrow(stratum),
-    n_unrest    = sum(stratum$unrest_next_year),
-    base_rate   = round(mean(stratum$unrest_next_year), 4)
-  )
+build_tier_base_rates <- function(outcome_col) {
+  features_check <- c("regime_type", outcome_col, features)
+  train_idx <- complete.cases(panel[, features_check]) & panel$year <= 2022
+  train <- panel[train_idx, ]
+  out <- list()
+  for (k in 0:3) {
+    s <- train[train$regime_type == k, ]
+    if (nrow(s) == 0) next
+    out[[regime_labels[[as.character(k)]]]] <- list(
+      regime_code = k,
+      n_obs       = nrow(s),
+      n_events    = sum(s[[outcome_col]]),
+      base_rate   = round(mean(s[[outcome_col]]), 4)
+    )
+  }
+  out
 }
 
 write_json(list(
   model_version = fit$model_version,
-  train_years   = fit$train_years,
-  regimes       = base_rates
+  tiers = list(
+    mobilization = build_tier_base_rates("outcome_mobilization"),
+    violence     = build_tier_base_rates("outcome_violence")
+  )
 ), "../artifacts/base_rates.json", auto_unbox = TRUE, pretty = TRUE)
 cat("Wrote artifacts/base_rates.json\n")
 ```
 
 ## Build country_snapshot.json
 
-For each country, take its **latest** year (typically 2024). Pull raw
-feature values, score with the pooled cross-sectional model, and bootstrap a
-90% CI by sampling 1,000 times from `MVN(coef, vcov)`.
-
-v0.4 simplification: features are raw cross-country levels, so the snapshot
-ships just `{value, contribution}` per feature — no `z`, `mean`, or `sd`
-fields. Sliders in the dashboard bind directly to raw values.
+Each country snapshot ships **two predictions** — one per tier — alongside
+the raw feature values (same features feed both tiers).
 
 ```{r}
 #| label: snapshot
-# Sampling helper: draw from MVN given coef + (bootstrap-empirical) cov,
-# score linearly + sigmoid. cv.glmnet has no closed-form vcov, so we use the
-# persisted bootstrap covariance directly.
-mvn_sample_ci <- function(stratum_model, x_named, n_draw = 1000, alpha = 0.10) {
-  co <- stratum_model$coefficients
-  vc <- stratum_model$vcov
+# MVN sampling helper.
+mvn_sample_ci <- function(model, x_named, n_draw = 1000, alpha = 0.10) {
+  co <- model$coefficients
+  vc <- model$vcov
   L  <- chol(vc + diag(1e-8, nrow(vc)))
   draws <- t(L) %*% matrix(rnorm(length(co) * n_draw), nrow = length(co)) + co
   x_full <- c(1, x_named[names(co)[-1]])
@@ -183,7 +181,33 @@ mvn_sample_ci <- function(stratum_model, x_named, n_draw = 1000, alpha = 0.10) {
     hi    = unname(quantile(p, 1 - alpha / 2, na.rm = TRUE)))
 }
 
-# Build per-country snapshot for the latest year that has complete features.
+# Score one country with one tier — returns point + CI + per-feature contributions.
+score_one <- function(tier, x_named) {
+  pool_coef <- tier$pooled_model$coefficients
+  pool_vec  <- setNames(rep(0, length(pool_coef)), names(pool_coef))
+  pool_vec["(Intercept)"] <- 1
+  for (f in features) if (f %in% names(pool_vec)) pool_vec[f] <- x_named[[f]]
+  pool_lp <- sum(pool_coef * pool_vec)
+  pool_p  <- 1 / (1 + exp(-pool_lp))
+
+  L <- chol(tier$pooled_model$vcov + diag(1e-8, nrow(tier$pooled_model$vcov)))
+  draws <- t(L) %*% matrix(rnorm(length(pool_coef) * 1000),
+                           nrow = length(pool_coef)) + pool_coef
+  p_draws <- 1 / (1 + exp(-as.numeric(t(draws) %*% pool_vec)))
+
+  contribs <- sapply(features, function(f) {
+    if (f %in% names(pool_coef)) unname(pool_coef[f] * x_named[[f]]) else 0
+  })
+  names(contribs) <- features
+
+  list(
+    point    = unname(pool_p),
+    ci_lo_90 = unname(quantile(p_draws, 0.05)),
+    ci_hi_90 = unname(quantile(p_draws, 0.95)),
+    contribs = contribs
+  )
+}
+
 latest_year <- max(panel$year[!is.na(panel$mass_mobilization_ord)])
 
 snapshot_rows <- list()
@@ -195,91 +219,59 @@ for (iso in unique(panel$iso3c)) {
   if (nrow(good) == 0) next
   cur <- good[1, ]
   k <- as.character(cur$regime_type)
-  if (!k %in% names(models)) next
 
   x_named <- setNames(as.numeric(cur[, features]), features)
 
-  # PRIMARY: pooled cross-sectional model.
-  pool_coef <- pooled_model$coefficients
-  pool_vec  <- setNames(rep(0, length(pool_coef)), names(pool_coef))
-  pool_vec["(Intercept)"] <- 1
-  for (f in features) if (f %in% names(pool_vec)) pool_vec[f] <- x_named[[f]]
-  pool_lp  <- sum(pool_coef * pool_vec)
-  pool_pred <- 1 / (1 + exp(-pool_lp))
-  L_pool <- chol(pooled_model$vcov + diag(1e-8, nrow(pooled_model$vcov)))
-  draws_pool <- t(L_pool) %*% matrix(rnorm(length(pool_coef) * 1000),
-                                     nrow = length(pool_coef)) + pool_coef
-  pool_lp_draws <- as.numeric(t(draws_pool) %*% pool_vec)
-  pool_p_draws  <- 1 / (1 + exp(-pool_lp_draws))
-  pool_ci_lo <- unname(quantile(pool_p_draws, 0.05))
-  pool_ci_hi <- unname(quantile(pool_p_draws, 0.95))
+  s_mob <- score_one(tiers$mobilization, x_named)
+  s_vio <- score_one(tiers$violence,     x_named)
 
-  # SECONDARY: stratified per-regime model (analyst context only).
-  pred <- mvn_sample_ci(models[[k]], x_named)
-
-  # Per-feature contribution = coef * value (logit units, pooled coefs).
-  # sapply over a named character vector loses outer names when the inner
-  # value is named (pool_coef[f] is a named scalar) — set names explicitly.
-  contribs <- sapply(features, function(f) {
-    if (f %in% names(pool_coef)) unname(pool_coef[f] * x_named[[f]]) else 0
-  })
-  names(contribs) <- features
-
-  # v0.4: ship just {value, contribution} per feature. No z, mean, sd.
   raw_vals <- list()
   for (f in features) {
     raw_vals[[f]] <- list(
-      value        = unname(cur[[f]]),
-      contribution = unname(contribs[[f]])
+      value                     = unname(cur[[f]]),
+      mobilization_contribution = unname(s_mob$contribs[[f]]),
+      violence_contribution     = unname(s_vio$contribs[[f]])
     )
   }
 
-  # Data-quality flag: 1 when the snapshot-year CPI was region-median
-  # imputed because no real source (WDI / IMF curated / IMF WEO) had a
-  # value for this country-year. The dashboard surfaces this as a "low
-  # data quality" badge — the prediction is still produced, but the user
-  # should down-weight it for affected countries (PRK / pre-2018 CUB / etc.).
   is_imputed <- isTRUE(as.logical(cur$cpi_imputed))
 
   snapshot_rows[[iso]] <- list(
-    iso3c        = iso,
-    name         = cur$name,
-    region       = cur$region,
-    subregion    = cur$subregion,
-    regime_type  = as.integer(cur$regime_type),
-    regime_label = regime_labels[[k]],
+    iso3c         = iso,
+    name          = cur$name,
+    region        = cur$region,
+    subregion     = cur$subregion,
+    regime_type   = as.integer(cur$regime_type),
+    regime_label  = regime_labels[[k]],
     snapshot_year = as.integer(cur$year),
-    # PRIMARY: pooled-model probability + 90% CI. Cross-country comparable.
-    predicted_probability = unname(pool_pred),
-    ci_lo_90              = unname(pool_ci_lo),
-    ci_hi_90              = unname(pool_ci_hi),
-    # SECONDARY: stratified prediction = "within-regime stress" signal.
-    # Dashboard surfaces this as analyst context only.
-    stratified_probability     = unname(pred["point"]),
-    stratified_ci_lo_90        = unname(pred["lo"]),
-    stratified_ci_hi_90        = unname(pred["hi"]),
-    cpi_imputed = is_imputed,
-    features  = raw_vals
+    mobilization  = list(
+      probability = s_mob$point,
+      ci_lo_90    = s_mob$ci_lo_90,
+      ci_hi_90    = s_mob$ci_hi_90
+    ),
+    violence      = list(
+      probability = s_vio$point,
+      ci_lo_90    = s_vio$ci_lo_90,
+      ci_hi_90    = s_vio$ci_hi_90
+    ),
+    cpi_imputed   = is_imputed,
+    features      = raw_vals
   )
 }
 
-cat("Scored", length(snapshot_rows), "countries for snapshot\n")
+cat("Scored", length(snapshot_rows), "countries (both tiers)\n")
 
 write_json(list(
-  model_version = fit$model_version,
-  snapshot_year = latest_year,
+  model_version  = fit$model_version,
+  snapshot_year  = latest_year,
   horizon_months = 12,
-  countries     = snapshot_rows
-), "../artifacts/country_snapshot.json", auto_unbox = TRUE, pretty = TRUE, digits = 6)
+  countries      = snapshot_rows
+), "../artifacts/country_snapshot.json",
+   auto_unbox = TRUE, pretty = TRUE, digits = 6)
 cat("Wrote artifacts/country_snapshot.json\n")
 ```
 
 ## Build hanke_inflation.json (dashboard toggle data)
-
-Steve Hanke's Troubled Currencies Project estimates for hyperinflation
-countries — exposed as a separate artifact so the dashboard can offer a
-"see what the prediction looks like with Hanke's higher estimates" toggle
-without re-fitting the model. Keys are iso3c → latest-year inflation %.
 
 ```{r}
 #| label: hanke-export
@@ -287,7 +279,6 @@ hanke_raw <- dbGetQuery(
   dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb", read_only = TRUE),
   "SELECT iso3c, year, cpi_inflation_hanke FROM hanke_inflation"
 )
-# For each country: pick the latest year's Hanke estimate.
 hanke_latest <- list()
 for (iso in unique(hanke_raw$iso3c)) {
   rows <- hanke_raw[hanke_raw$iso3c == iso, ]
@@ -300,7 +291,7 @@ for (iso in unique(hanke_raw$iso3c)) {
 }
 
 write_json(list(
-  source = "Steve Hanke Troubled Currencies Project (Cato/Hopkins)",
+  source    = "Steve Hanke Troubled Currencies Project (Cato/Hopkins)",
   countries = hanke_latest
 ), "../artifacts/hanke_inflation.json", auto_unbox = TRUE, pretty = TRUE)
 cat("Wrote artifacts/hanke_inflation.json — countries:", length(hanke_latest), "\n")
@@ -310,25 +301,30 @@ cat("Wrote artifacts/hanke_inflation.json — countries:", length(hanke_latest),
 
 ```{r}
 #| label: calibration
+build_cal_json <- function(c) {
+  list(
+    outcome_col       = c$outcome_col,
+    holdout_year      = c$holdout_year,
+    n_holdout         = c$n_holdout,
+    base_rate         = c$base_rate,
+    brier             = c$brier,
+    brier_baseline    = c$brier_baseline,
+    brier_skill_score = c$brier_skill_score,
+    log_loss          = c$log_loss,
+    reliability       = c$reliability
+  )
+}
 write_json(list(
   model_version = fit$model_version,
-  holdout_year  = calibration_obj$holdout_year,
-  n_holdout     = calibration_obj$n_holdout,
-  brier         = calibration_obj$brier,
-  brier_baseline = calibration_obj$brier_baseline,
-  brier_skill_score = calibration_obj$brier_skill_score,
-  log_loss      = calibration_obj$log_loss,
-  base_rate     = calibration_obj$base_rate,
-  reliability   = calibration_obj$reliability
+  tiers = list(
+    mobilization = build_cal_json(calibration_obj$mobilization),
+    violence     = build_cal_json(calibration_obj$violence)
+  )
 ), "../artifacts/calibration.json", auto_unbox = TRUE, pretty = TRUE)
 cat("Wrote artifacts/calibration.json\n")
 ```
 
 ## Sync dashboard artifact copy
-
-The dashboard fetches from `web/artifacts/` so it can run as a static site
-with no parent-directory access. Keep that served copy in lockstep with the
-canonical `artifacts/` directory every time artifacts are exported.
 
 ```{r}
 #| label: sync-web-artifacts
@@ -348,15 +344,18 @@ for (f in list.files("../artifacts", pattern = "\\.json$")) {
   cat(sprintf("  %-30s %8s bytes\n", f, format(size, big.mark = ",")))
 }
 
-# Spot-check Cuba (defensive: skip if not in snapshot for any reason)
-cat("\n=== Cuba snapshot ===\n")
+cat("\n=== Cuba snapshot (both tiers) ===\n")
 cuba <- snapshot_rows[["CUB"]]
 if (is.null(cuba)) {
-  cat("  (Cuba not in snapshot - check data coverage)\n")
+  cat("  (Cuba not in snapshot)\n")
 } else {
-  cat("  Regime:                ", cuba$regime_label, "\n")
-  cat("  Snapshot year:         ", cuba$snapshot_year, "\n")
-  cat("  Predicted probability: ", round(cuba$predicted_probability, 3), "\n")
-  cat("  90% CI:                ", round(cuba$ci_lo_90, 3), "to", round(cuba$ci_hi_90, 3), "\n")
+  cat("  Regime:        ", cuba$regime_label, "\n")
+  cat("  Snapshot year: ", cuba$snapshot_year, "\n")
+  cat("  P(mobilization):", round(cuba$mobilization$probability, 3),
+      "  CI [", round(cuba$mobilization$ci_lo_90, 3), ",",
+                round(cuba$mobilization$ci_hi_90, 3), "]\n")
+  cat("  P(violence):    ", round(cuba$violence$probability, 3),
+      "  CI [", round(cuba$violence$ci_lo_90, 3), ",",
+                round(cuba$violence$ci_hi_90, 3), "]\n")
 }
 ```

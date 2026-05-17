@@ -1,16 +1,37 @@
 {
-  "model_version": "unrest-risk-v0.5-monotonic-constrained",
-  "holdout_year": 2023,
-  "n_holdout": 144,
-  "brier": 0.1315,
-  "brier_baseline": 0.1766,
-  "brier_skill_score": 0.2557,
-  "log_loss": 0.4187,
-  "base_rate": 0.2292,
-  "reliability": {
-    "bin_centers": [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95],
-    "predicted": [0.0616, 0.1505, 0.248, 0.3461, 0.4636, 0.5645, 0.6397, 0.742, 0.8037],
-    "actual": [0.0244, 0.1905, 0.2593, 0.0833, 0.6667, 0.3333, 0.8, 0.8333, 1],
-    "n": [41, 42, 27, 12, 6, 3, 5, 6, 2]
+  "model_version": "unrest-risk-v0.6-two-tier",
+  "tiers": {
+    "mobilization": {
+      "outcome_col": "outcome_mobilization",
+      "holdout_year": 2023,
+      "n_holdout": 144,
+      "base_rate": 0.1181,
+      "brier": 0.1096,
+      "brier_baseline": 0.1041,
+      "brier_skill_score": -0.0525,
+      "log_loss": 0.4045,
+      "reliability": {
+        "bin_centers": [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95],
+        "predicted": [0.0521, 0.1316],
+        "actual": [0.1223, 0],
+        "n": [139, 5]
+      }
+    },
+    "violence": {
+      "outcome_col": "outcome_violence",
+      "holdout_year": 2023,
+      "n_holdout": 122,
+      "base_rate": 0.1803,
+      "brier": 0.0806,
+      "brier_baseline": 0.1478,
+      "brier_skill_score": 0.4546,
+      "log_loss": 0.2696,
+      "reliability": {
+        "bin_centers": [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95],
+        "predicted": [0.0304, 0.133, 0.2486, 0.335, 0.4232, 0.5263, 0.6303, 0.7702, 0.8623, 0.945],
+        "actual": [0.0429, 0.0833, 0.2, 0.1667, 0, 0, 0.75, 0, 1, 1],
+        "n": [70, 12, 10, 6, 3, 3, 4, 2, 4, 8]
+      }
+    }
   }
 }

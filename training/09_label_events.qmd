@@ -1,5 +1,5 @@
 ---
-title: "09 — Label outcome events (multi-source fusion)"
+title: "09 — Label outcome events (two-tier: mobilization + violence)"
 format:
   html:
     toc: true
@@ -10,25 +10,27 @@ execute:
   message: false
 ---
 
-For each (country, year), look at **next year's events** across four
-independent sources and flag the country-year as unrest if **any** of these
-fire:
+**v0.6:** stratify the outcome into two tiers. The previous single
+`unrest_next_year` flag fused four channels into one — which made the
+prediction ambiguous ("USA 26%" could mean coup OR protest OR armed
+conflict; same number meant different things in different countries).
+The two tiers separate **disruptive mobilization** from
+**regime-threatening violence**.
 
-| Source | Threshold | Captures |
-|---|---|---|
-| Cline Center coups | `n_realized + n_attempted >= 1` | Regime-change attempts |
-| UCDP GED | `fatalities_best >= 100` next year | Organized armed-violence episodes |
-| MMP large protests | `n_large_protests >= 1` next year | Sustained mass mobilization at scale (≥1,000 participants) |
-| V-Dem (fallback) | `v2cagenmob_ord >= 4` next year | When MMP doesn't cover (post-2020) |
+| Tier | Outcome column | Channels (OR-fused) | What "yes" means |
+|---|---|---|---|
+| 1 | `outcome_mobilization` | MMP per-capita large protest (`n_large_protests >= 1`) OR V-Dem `v2cagenmob_ord >= 4` | People in the streets at country-defining scale: Yellow Vests, BLM, Iran 2022, HK 2019, Tahrir, Iceland 2008 |
+| 2 | `outcome_violence` | UCDP fatalities ≥100 OR Cline Center coup attempt | Regime-threatening violence: armed-conflict deaths or coup attempts |
 
-Why a fusion: V-Dem alone gave us flat base rates (47–60% across regimes)
-because the ordinal is too broad. Event-based sources are sparser and more
-specific — they should let closed-autocracy rates and liberal-democracy
-rates diverge as they should.
+We keep `unrest_next_year` as a legacy column (OR of both tiers) for
+backwards compatibility with anything that still depends on it.
 
-V-Dem stays as a **post-2020 fallback** because MMP ends in 2020.
+**Source coverage:**
 
-Output: `panel_labeled` table (`panel_features` + outcome columns).
+- Mobilization: V-Dem v16 runs through 2025 ✓; MMP ends 2020 (still usable for training)
+- Violence: UCDP runs through 2024 ✓; Cline coups end 2022 (still usable for training)
+
+Output: `panel_labeled` table (`panel_features` + 3 outcome columns).
 
 ## Libraries
 
@@ -38,11 +40,7 @@ library(DBI)
 library(duckdb)
 ```
 
-## Build the lead-label panel
-
-DuckDB does the heavy lifting in one SQL pass. For each (iso3c, year) row in
-`panel_features`, we left-join the next-year row from each event source and
-OR the thresholds.
+## Build the two-tier label
 
 ```{r}
 #| label: label
@@ -50,17 +48,14 @@ con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
 
 dbExecute(con, "
   CREATE OR REPLACE TABLE panel_labeled AS
-  WITH next_yr AS (
-    SELECT iso3c, year, year + 1 AS forecast_year
-    FROM panel_features
-  ),
-  fused AS (
+  WITH fused AS (
     SELECT
       p.*,
       LEAD(mass_mobilization_ord) OVER (PARTITION BY p.iso3c ORDER BY p.year) AS mass_mob_next,
 
-      -- per-source flags for next year, defaulting NULL to 0
-      COALESCE(c.n_realized, 0)  + COALESCE(c.n_attempted, 0)   AS coup_flag,
+      -- Per-source next-year flags. NULL = no data at all (post-source-end),
+      -- 0 = source ran but recorded no event, >0 = event(s) recorded.
+      COALESCE(c.n_realized, 0) + COALESCE(c.n_attempted, 0)   AS coup_flag,
       COALESCE(u.fatalities_best, 0)                            AS ucdp_fatal_next,
       COALESCE(m.n_large_protests, 0)                           AS mmp_large_next,
       LEAD(mass_mobilization_ord) OVER (PARTITION BY p.iso3c ORDER BY p.year) AS vdem_mob_next
@@ -70,14 +65,36 @@ dbExecute(con, "
     LEFT JOIN mmp_annual   m ON m.iso3c = p.iso3c AND m.year = p.year + 1
   )
   SELECT *,
+    -- TIER 1: mass mobilization (protest/demonstration at country-defining scale)
+    CASE
+      WHEN mmp_large_next >= 1
+        OR (vdem_mob_next >= 4 AND year >= 2020)  -- V-Dem fallback for post-MMP years
+      THEN 1
+      WHEN vdem_mob_next IS NULL AND mmp_large_next = 0
+      THEN NULL                                   -- no info about next year
+      ELSE 0
+    END AS outcome_mobilization,
+
+    -- TIER 2: regime-threatening violence (armed conflict or coup)
+    CASE
+      WHEN coup_flag >= 1
+        OR ucdp_fatal_next >= 100
+      THEN 1
+      WHEN coup_flag = 0 AND ucdp_fatal_next = 0
+      THEN 0
+      ELSE NULL
+    END AS outcome_violence,
+
+    -- LEGACY: OR of both tiers, preserved for backwards compatibility
+    -- with anything that still reads unrest_next_year.
     CASE
       WHEN coup_flag >= 1
         OR ucdp_fatal_next >= 100
         OR mmp_large_next >= 1
-        OR (vdem_mob_next >= 4 AND year >= 2020) -- V-Dem fallback for post-MMP years
+        OR (vdem_mob_next >= 4 AND year >= 2020)
       THEN 1
       WHEN vdem_mob_next IS NULL AND coup_flag = 0 AND ucdp_fatal_next = 0 AND mmp_large_next = 0
-      THEN NULL    -- no info about next year for this country
+      THEN NULL
       ELSE 0
     END AS unrest_next_year
   FROM fused
@@ -86,36 +103,48 @@ dbExecute(con, "
 dbGetQuery(con, "SELECT COUNT(*) AS rows FROM panel_labeled")
 ```
 
-## Outcome distribution
+## Outcome distributions
 
 ```{r}
-#| label: distribution
+#| label: distribution-mobilization
+cat("Tier 1: outcome_mobilization\n")
 dbGetQuery(con, "
-  SELECT unrest_next_year, COUNT(*) AS n,
-         ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM panel_labeled WHERE unrest_next_year IS NOT NULL), 1) AS pct
+  SELECT outcome_mobilization, COUNT(*) AS n,
+         ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM panel_labeled WHERE outcome_mobilization IS NOT NULL), 1) AS pct
   FROM panel_labeled
-  WHERE unrest_next_year IS NOT NULL
-  GROUP BY unrest_next_year
-  ORDER BY unrest_next_year
+  WHERE outcome_mobilization IS NOT NULL
+  GROUP BY outcome_mobilization
+  ORDER BY outcome_mobilization
 ")
 ```
 
-## Which source fires most often?
+```{r}
+#| label: distribution-violence
+cat("Tier 2: outcome_violence\n")
+dbGetQuery(con, "
+  SELECT outcome_violence, COUNT(*) AS n,
+         ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM panel_labeled WHERE outcome_violence IS NOT NULL), 1) AS pct
+  FROM panel_labeled
+  WHERE outcome_violence IS NOT NULL
+  GROUP BY outcome_violence
+  ORDER BY outcome_violence
+")
+```
 
-Useful for diagnosing whether one source is dominating the label.
+## Channel-by-channel source contribution
 
 ```{r}
 #| label: source-contribution
 dbGetQuery(con, "
   SELECT
-    SUM(CASE WHEN coup_flag      >= 1 THEN 1 ELSE 0 END) AS n_coups,
-    SUM(CASE WHEN ucdp_fatal_next >= 100 THEN 1 ELSE 0 END) AS n_ucdp,
-    SUM(CASE WHEN mmp_large_next  >= 1 THEN 1 ELSE 0 END) AS n_mmp,
-    SUM(CASE WHEN vdem_mob_next   >= 4 AND year >= 2020 THEN 1 ELSE 0 END) AS n_vdem,
-    SUM(unrest_next_year) AS n_any_unrest,
+    SUM(CASE WHEN coup_flag      >= 1                       THEN 1 ELSE 0 END) AS n_coups,
+    SUM(CASE WHEN ucdp_fatal_next >= 100                    THEN 1 ELSE 0 END) AS n_ucdp,
+    SUM(CASE WHEN mmp_large_next  >= 1                      THEN 1 ELSE 0 END) AS n_mmp,
+    SUM(CASE WHEN vdem_mob_next   >= 4 AND year >= 2020     THEN 1 ELSE 0 END) AS n_vdem_fallback,
+    SUM(outcome_mobilization) AS n_mobilization_total,
+    SUM(outcome_violence)     AS n_violence_total,
     COUNT(*) AS n_total
   FROM panel_labeled
-  WHERE unrest_next_year IS NOT NULL
 ")
 ```
 
@@ -126,10 +155,11 @@ dbGetQuery(con, "
 dbGetQuery(con, "
   SELECT regime_type,
          COUNT(*) AS n_obs,
-         SUM(unrest_next_year) AS n_unrest,
-         ROUND(100.0 * AVG(unrest_next_year), 1) AS pct_unrest
+         ROUND(100.0 * AVG(outcome_mobilization), 1) AS pct_mobilization,
+         ROUND(100.0 * AVG(outcome_violence), 1)     AS pct_violence
   FROM panel_labeled
-  WHERE unrest_next_year IS NOT NULL AND regime_type IS NOT NULL
+  WHERE regime_type IS NOT NULL
+    AND outcome_mobilization IS NOT NULL AND outcome_violence IS NOT NULL
   GROUP BY regime_type
   ORDER BY regime_type
 ")
@@ -140,7 +170,8 @@ dbGetQuery(con, "
 ```{r}
 #| label: cuba-check
 dbGetQuery(con, "
-  SELECT year, coup_flag, ucdp_fatal_next, mmp_large_next, vdem_mob_next, unrest_next_year
+  SELECT year, coup_flag, ucdp_fatal_next, mmp_large_next, vdem_mob_next,
+         outcome_mobilization, outcome_violence
   FROM panel_labeled
   WHERE iso3c = 'CUB' AND year BETWEEN 2015 AND 2023
   ORDER BY year

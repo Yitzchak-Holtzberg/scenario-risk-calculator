@@ -1,5 +1,5 @@
 ---
-title: "11 — Holdout calibration"
+title: "11 — Holdout calibration (both tiers)"
 format:
   html:
     toc: true
@@ -10,14 +10,9 @@ execute:
   message: false
 ---
 
-Score the 2023 holdout with the fitted model. Compute:
-
-- **Brier score**: mean squared error of probability predictions (lower = better; 0.25 = random for balanced classes)
-- **Log loss**: cross-entropy (lower = better; log(2) ≈ 0.69 = random)
-- **Reliability**: bin predictions into 10 deciles, compare predicted vs. actual rate per bin
-
-The reliability diagram is what tells us whether "predicted 20%" actually
-corresponds to a ~20% empirical rate.
+Score the 2023 holdout for each tier (mobilization, violence) separately.
+Each tier gets its own Brier / log loss / reliability bins. The dashboard
+displays both calibration metrics so users can judge each prediction.
 
 ## Libraries
 
@@ -34,116 +29,132 @@ source("_helpers.R")
 
 ```{r}
 #| label: load
-fit <- readRDS("../data/model/fit.rds")
-models   <- fit$models
+fit      <- readRDS("../data/model/fit.rds")
 features <- fit$features
-form     <- fit$formula
+tiers    <- fit$tiers
 
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
-needed_cols <- paste(c("iso3c", "year", "regime_type", "unrest_next_year", features), collapse = ", ")
+needed_cols <- paste(c("iso3c", "year", "regime_type",
+                       "outcome_mobilization", "outcome_violence", features),
+                     collapse = ", ")
 panel <- dbGetQuery(con, sprintf("SELECT %s FROM panel_labeled", needed_cols))
 dbDisconnect(con, shutdown = TRUE)
-
-holdout <- panel[
-  complete.cases(panel[, c("regime_type", "unrest_next_year", features)]) &
-  panel$year == 2023, ]
-cat("Holdout rows:", nrow(holdout),
-    "  | unrest rate:", round(mean(holdout$unrest_next_year), 3), "\n")
 ```
 
-## Score the holdout
-
-**Primary** prediction comes from the pooled ridge (the absolute-likelihood
-scorer the dashboard headlines). We also compute the stratified per-regime
-prediction for secondary calibration metrics.
+## Per-tier scoring helper
 
 ```{r}
-#| label: score
-pool_form    <- fit$pool_formula
-pooled_model <- fit$pooled_model
+#| label: scorer
+score_tier <- function(tier, outcome_col) {
+  pooled_model <- tier$pooled_model
+  pool_form    <- tier$pool_formula
 
-# Pooled prediction: single design matrix for all rows.
-mm_pool_h  <- model.matrix(pool_form, holdout)
-x_pool_h   <- mm_pool_h[, -1, drop = FALSE]
-holdout$pred_pooled <- as.numeric(predict(pooled_model$fit_cv,
-                                          newx = x_pool_h,
-                                          s    = "lambda.min",
-                                          type = "response"))
+  holdout <- panel[
+    complete.cases(panel[, c("regime_type", outcome_col, features)]) &
+    panel$year == 2023, ]
 
-# Stratified prediction: one stratum-specific design matrix per regime.
-holdout$pred_strat <- NA_real_
-for (k in names(models)) {
-  idx <- holdout$regime_type == as.integer(k)
-  if (any(idx)) {
-    mm_h <- model.matrix(form, holdout[idx, ])
-    x_h  <- mm_h[, -1, drop = FALSE]
-    holdout$pred_strat[idx] <- as.numeric(predict(models[[k]]$fit_cv,
-                                                  newx = x_h,
-                                                  s    = "lambda.min",
-                                                  type = "response"))
-  }
+  mm_pool_h <- model.matrix(pool_form, holdout)
+  x_pool_h  <- mm_pool_h[, -1, drop = FALSE]
+  holdout$pred <- as.numeric(predict(pooled_model$fit_cv, newx = x_pool_h,
+                                     s = "lambda.min", type = "response"))
+  holdout <- holdout[!is.na(holdout$pred), ]
+
+  y <- holdout[[outcome_col]]
+  brier          <- mean((holdout$pred - y)^2)
+  log_loss       <- -mean(y * log(pmax(holdout$pred, 1e-9)) +
+                          (1 - y) * log(pmax(1 - holdout$pred, 1e-9)))
+  base_rate      <- mean(y)
+  brier_baseline <- mean((base_rate - y)^2)
+
+  breaks <- seq(0, 1, by = 0.1)
+  holdout$bin <- cut(holdout$pred, breaks = breaks, include.lowest = TRUE, right = FALSE)
+  reliability <- do.call(rbind, lapply(levels(holdout$bin), function(b) {
+    rows <- holdout[holdout$bin == b, ]
+    if (nrow(rows) == 0) return(NULL)
+    data.frame(bin = b,
+               predicted = mean(rows$pred),
+               actual    = mean(rows[[outcome_col]]),
+               n         = nrow(rows))
+  }))
+
+  list(
+    outcome_col       = outcome_col,
+    holdout_year      = 2023,
+    n_holdout         = nrow(holdout),
+    brier             = brier,
+    brier_baseline    = brier_baseline,
+    brier_skill_score = 1 - brier / brier_baseline,
+    log_loss          = log_loss,
+    base_rate         = base_rate,
+    mean_pred         = mean(holdout$pred),
+    reliability       = list(
+      bin_centers = seq(0.05, 0.95, by = 0.1),
+      predicted   = reliability$predicted,
+      actual      = reliability$actual,
+      n           = reliability$n
+    )
+  )
 }
 
-# Headline prediction = pooled. (Dashboard uses this.)
-holdout$pred <- holdout$pred_pooled
-holdout <- holdout[!is.na(holdout$pred), ]
-cat("Scored rows:", nrow(holdout), "\n")
-cat("Pooled mean pred:    ", round(mean(holdout$pred_pooled, na.rm = TRUE), 3), "\n")
-cat("Stratified mean pred:", round(mean(holdout$pred_strat,  na.rm = TRUE), 3), "\n")
+mob_cal <- score_tier(tiers$mobilization, "outcome_mobilization")
+vio_cal <- score_tier(tiers$violence,     "outcome_violence")
 ```
 
-## Brier and log loss
+## Calibration summary
 
 ```{r}
-#| label: metrics
-brier   <- mean((holdout$pred - holdout$unrest_next_year)^2)
-log_loss <- -mean(holdout$unrest_next_year * log(pmax(holdout$pred, 1e-9)) +
-                  (1 - holdout$unrest_next_year) * log(pmax(1 - holdout$pred, 1e-9)))
-base_rate <- mean(holdout$unrest_next_year)
-brier_baseline <- mean((base_rate - holdout$unrest_next_year)^2)
-
-cat("Brier score:        ", round(brier, 4),
-    "  (baseline = always-predict-base-rate:", round(brier_baseline, 4), ")\n")
-cat("Log loss:           ", round(log_loss, 4), "\n")
-cat("Brier skill score:  ", round(1 - brier / brier_baseline, 3),
-    "  (positive = better than baseline)\n")
+#| label: summary
+summary_tbl <- data.frame(
+  tier              = c("mobilization", "violence"),
+  n_holdout         = c(mob_cal$n_holdout, vio_cal$n_holdout),
+  base_rate         = round(c(mob_cal$base_rate, vio_cal$base_rate), 3),
+  mean_pred         = round(c(mob_cal$mean_pred, vio_cal$mean_pred), 3),
+  brier             = round(c(mob_cal$brier, vio_cal$brier), 4),
+  brier_baseline    = round(c(mob_cal$brier_baseline, vio_cal$brier_baseline), 4),
+  brier_skill_score = round(c(mob_cal$brier_skill_score, vio_cal$brier_skill_score), 3),
+  log_loss          = round(c(mob_cal$log_loss, vio_cal$log_loss), 4)
+)
+print(summary_tbl)
 ```
 
-## Reliability bins
-
-Bucket predictions into deciles and compare predicted vs actual unrest rate
-within each bin. A perfectly calibrated model: predicted ≈ actual.
+## Reliability — mobilization tier
 
 ```{r}
-#| label: reliability
-breaks <- seq(0, 1, by = 0.1)
-holdout$bin <- cut(holdout$pred, breaks = breaks, include.lowest = TRUE, right = FALSE)
-
-reliability <- do.call(rbind, lapply(levels(holdout$bin), function(b) {
-  rows <- holdout[holdout$bin == b, ]
-  if (nrow(rows) == 0) return(NULL)
-  data.frame(
-    bin       = b,
-    predicted = mean(rows$pred),
-    actual    = mean(rows$unrest_next_year),
-    n         = nrow(rows)
-  )
-}))
-reliability
-```
-
-```{r}
-#| label: reliability-plot
-#| fig-cap: "Reliability diagram on 2023 holdout (predicted vs. actual unrest rate by decile)"
+#| label: reliability-mob
+#| fig-cap: "Reliability diagram (mobilization): predicted vs. actual rate by decile"
 #| fig-width: 6
 #| fig-height: 6
-ggplot(reliability, aes(x = predicted, y = actual)) +
+mob_rel <- data.frame(predicted = mob_cal$reliability$predicted,
+                      actual    = mob_cal$reliability$actual,
+                      n         = mob_cal$reliability$n)
+ggplot(mob_rel, aes(x = predicted, y = actual)) +
   geom_abline(slope = 1, intercept = 0, color = "#A89880", linetype = "dashed") +
   geom_line(color = srs_palette$accent, linewidth = 0.8) +
   geom_point(aes(size = n), color = srs_palette$accent) +
   scale_size_continuous(range = c(2, 8), name = "n in bin") +
   coord_fixed(xlim = c(0, 1), ylim = c(0, 1)) +
-  labs(x = "Mean predicted probability", y = "Empirical unrest rate",
+  labs(x = "Predicted probability", y = "Empirical mobilization rate",
+       caption = "Diagonal = perfect calibration") +
+  srs_theme()
+```
+
+## Reliability — violence tier
+
+```{r}
+#| label: reliability-vio
+#| fig-cap: "Reliability diagram (violence): predicted vs. actual rate by decile"
+#| fig-width: 6
+#| fig-height: 6
+vio_rel <- data.frame(predicted = vio_cal$reliability$predicted,
+                      actual    = vio_cal$reliability$actual,
+                      n         = vio_cal$reliability$n)
+ggplot(vio_rel, aes(x = predicted, y = actual)) +
+  geom_abline(slope = 1, intercept = 0, color = "#A89880", linetype = "dashed") +
+  geom_line(color = srs_palette$crisis, linewidth = 0.8) +
+  geom_point(aes(size = n), color = srs_palette$crisis) +
+  scale_size_continuous(range = c(2, 8), name = "n in bin") +
+  coord_fixed(xlim = c(0, 1), ylim = c(0, 1)) +
+  labs(x = "Predicted probability", y = "Empirical violence rate",
        caption = "Diagonal = perfect calibration") +
   srs_theme()
 ```
@@ -152,21 +163,7 @@ ggplot(reliability, aes(x = predicted, y = actual)) +
 
 ```{r}
 #| label: persist
-calibration <- list(
-  holdout_year = 2023,
-  n_holdout    = nrow(holdout),
-  brier        = brier,
-  brier_baseline = brier_baseline,
-  brier_skill_score = 1 - brier / brier_baseline,
-  log_loss     = log_loss,
-  base_rate    = base_rate,
-  reliability  = list(
-    bin_centers = seq(0.05, 0.95, by = 0.1),
-    predicted   = reliability$predicted,
-    actual      = reliability$actual,
-    n           = reliability$n
-  )
-)
-saveRDS(calibration, "../data/model/calibration.rds")
-cat("Saved data/model/calibration.rds\n")
+saveRDS(list(mobilization = mob_cal, violence = vio_cal),
+        "../data/model/calibration.rds")
+cat("Saved data/model/calibration.rds with both tiers\n")
 ```
