@@ -28,7 +28,20 @@
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
     }
-    .page { max-width: 760px; margin: 0 auto; padding: 80px 40px 100px; }
+    .page { max-width: 1280px; margin: 0 auto; padding: 64px 56px 96px; }
+
+    /* Two-column body grid on wide screens; stacks on narrow */
+    .body-grid {
+      display: grid;
+      grid-template-columns: minmax(400px, 480px) 1fr;
+      gap: 56px;
+      align-items: start;
+    }
+    @media (max-width: 960px) {
+      .page { padding: 56px 24px 80px; }
+      .body-grid { grid-template-columns: 1fr; gap: 32px; }
+    }
+    .body-grid .left-col, .body-grid .right-col { min-width: 0; }
     .num { font-variant-numeric: tabular-nums; }
     .mono { font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace; }
 
@@ -295,33 +308,37 @@
           </div>
         </div>
 
-        <section class="probability" id="prob-section">
-          <div class="label">Probability of mass unrest, next 12 months</div>
-          <div class="big-number num" id="big-number">${fmt(country.predicted_probability)}</div>
-          <div class="ci">90% CI: <span class="num">${fmt(country.ci_lo_90)}</span> – <span class="num">${fmt(country.ci_hi_90)}</span></div>
-          <div class="scenario-note">Scenario-adjusted point estimate (CI shown for current snapshot only)</div>
-        </section>
+        <div class="body-grid">
+          <div class="left-col">
+            <section class="probability" id="prob-section">
+              <div class="label">Probability of mass unrest, next 12 months</div>
+              <div class="big-number num" id="big-number">${fmt(country.predicted_probability)}</div>
+              <div class="ci">90% CI: <span class="num">${fmt(country.ci_lo_90)}</span> – <span class="num">${fmt(country.ci_hi_90)}</span></div>
+              <div class="scenario-note">Scenario-adjusted point estimate (CI shown for current snapshot only)</div>
+            </section>
 
-        <section class="reference">
-          <div class="label">Reference class</div>
-          <p id="reference-body"></p>
-        </section>
+            <section class="reference">
+              <div class="label">Reference class</div>
+              <p id="reference-body"></p>
+            </section>
 
-        <section>
-          <h2 class="section-title">Indicator contributions</h2>
-          <div id="indicators"></div>
-        </section>
-
-        <section style="margin-top:48px;">
-          <div style="display:flex; justify-content:space-between; align-items:baseline;">
-            <h2 class="section-title" style="border-bottom:none; padding-bottom:0;">Scenario sliders</h2>
-            <button class="reset-btn" id="reset-btn">Reset to current values</button>
+            <section style="margin-top:32px;">
+              <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                <h2 class="section-title" style="border-bottom:none; padding-bottom:0;">Scenario sliders</h2>
+                <button class="reset-btn" id="reset-btn">Reset</button>
+              </div>
+              <p style="font-size:13px; color:var(--ink-muted); margin-bottom:20px; font-style:italic;">
+                Adjust any indicator to see how the probability shifts.
+              </p>
+              <div id="sliders"></div>
+            </section>
           </div>
-          <p style="font-size:14px; color:var(--ink-muted); margin-bottom:24px; font-style:italic;">
-            Adjust any indicator to see how the probability shifts.
-          </p>
-          <div id="sliders"></div>
-        </section>
+
+          <div class="right-col">
+            <h2 class="section-title">Indicator contributions</h2>
+            <div id="indicators"></div>
+          </div>
+        </div>
       `;
 
       // Custom country picker with typeahead
