@@ -46,7 +46,8 @@ indicators <- c(
   gdp_growth    = "NY.GDP.MKTP.KD.ZG", # GDP growth, annual %
   gdp_per_cap   = "NY.GDP.PCAP.KD",    # GDP per capita, constant 2015 US$
   trade_pct_gdp = "NE.TRD.GNFS.ZS",    # Trade (% of GDP)
-  unemployment  = "SL.UEM.TOTL.ZS"     # Unemployment, % of labor force
+  unemployment  = "SL.UEM.TOTL.ZS",    # Unemployment, % of labor force
+  population    = "SP.POP.TOTL"        # Population, total (used by 03a for per-capita protest threshold)
 )
 ```
 

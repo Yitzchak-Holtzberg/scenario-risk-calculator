@@ -1,5 +1,5 @@
 ---
-title: "02b — Load IMF + Hanke inflation supplements"
+title: "02b — Load IMF WEO supplements + Hanke estimates"
 format:
   html:
     toc: true
@@ -59,15 +59,42 @@ cat("Countries covered:", length(unique(imf$iso3c)), "\n")
 print(table(imf$iso3c))
 ```
 
+## Load curated unemployment supplement
+
+Hand-curated unemployment + underemployment estimates for state-managed
+economies (Cuba, Belarus, Venezuela, PRK, Eritrea, Turkmenistan, Cambodia,
+Laos) where the official ILO/WDI rate doesn't reflect economic reality
+because of state-employment-guarantee policies. Sourced from IMF Article
+IV reviews + economic-NGO consensus estimates.
+
+```{r}
+#| label: unemployment-supplement
+un <- read.csv("../data/curated/unemployment_supplement.csv",
+               comment.char = "#", stringsAsFactors = FALSE)
+un <- un[!is.na(un$unemployment_curated),
+         c("iso3c", "year", "unemployment_curated", "source")]
+un$year <- as.integer(un$year)
+cat("Unemployment supplement rows:", nrow(un), "\n")
+cat("Countries covered:", length(unique(un$iso3c)), "\n")
+print(table(un$iso3c))
+```
+
 ## Load IMF WEO bulk file
 
 The WEO CSV is wide: ~65 metadata columns followed by year columns 1980–2031.
-Each row is one (country, indicator) pair. We filter to PCPIPCH (CPI percent
-change), pivot to long, drop the IMF country-aggregates (codes ending in
-`Q`, e.g. CAQ = Caribbean) since the panel only knows ISO3 country codes.
+Each row is one (country, indicator) pair. We extract three indicators:
+
+- **PCPIPCH** — Consumer prices, % change (inflation). Backfills WDI inflation.
+- **NGDP_RPCH** — Real GDP, % change (growth). Backfills WDI gdp_growth for 2025+.
+- **NGDPDPC** — Nominal GDP per capita, USD. Backfills WDI gdp_per_cap for 2025+.
+
+The latter two unblock 2025 forecasting: WDI typically releases full-year
+2025 GDP data ~12–18 months behind real time, but IMF country teams produce
+year-T estimates by April of year T+1 (Article IV consultations + the WEO
+Spring update), which the IMF then projects forward through year T+6.
 
 ```{r}
-#| label: weo
+#| label: weo-load
 weo_path <- "../data/raw/imf_weo_2026_04.csv"
 
 if (!file.exists(weo_path)) {
@@ -76,39 +103,53 @@ if (!file.exists(weo_path)) {
        "and save to that path. The file is gitignored (~26MB).")
 }
 
-weo_wide <- read.csv(weo_path, check.names = FALSE, stringsAsFactors = FALSE,
-                     fileEncoding = "UTF-8-BOM", na.strings = c("", "NA"))
+weo_raw <- read.csv(weo_path, check.names = FALSE, stringsAsFactors = FALSE,
+                    fileEncoding = "UTF-8-BOM", na.strings = c("", "NA"))
 
-# Filter to the CPI percent-change series.
-weo_wide <- weo_wide[grepl("\\.PCPIPCH\\.A$", weo_wide$SERIES_CODE), ]
-cat("PCPIPCH series in WEO file:", nrow(weo_wide), "\n")
+# Extract ISO3 (first dotted segment) and indicator code (second segment).
+weo_raw$iso3c     <- sub("\\..*", "", weo_raw$SERIES_CODE)
+weo_raw$indicator <- sub("^[A-Z]{3}\\.([A-Z_]+)\\..*$", "\\1", weo_raw$SERIES_CODE)
 
-# Extract ISO3 from SERIES_CODE (first dotted segment).
-weo_wide$iso3c <- sub("\\..*", "", weo_wide$SERIES_CODE)
+# Drop IMF aggregates (codes ending in Q — CAQ/CBQ/etc).
+weo_raw <- weo_raw[!grepl("Q$", weo_raw$iso3c), ]
 
-# Drop IMF country-aggregate codes (4th char Q in 3-letter codes won't happen;
-# the aggregates use codes like CAQ/CBQ/CMQ that end in Q). Real ISO3 codes
-# never end in Q, so this is safe.
-weo_wide <- weo_wide[!grepl("Q$", weo_wide$iso3c), ]
+year_cols <- grep("^(19|20)[0-9]{2}$", names(weo_raw), value = TRUE)
 
-# Identify year columns (1980-2031 as strings).
-year_cols <- grep("^(19|20)[0-9]{2}$", names(weo_wide), value = TRUE)
+# Pull-and-pivot helper for one indicator.
+weo_extract <- function(indicator_code, value_col) {
+  rows <- weo_raw[weo_raw$indicator == indicator_code, ]
+  cat(indicator_code, " series rows:", nrow(rows), "\n")
+  if (nrow(rows) < 100) {
+    stop(sprintf("WEO %s filter matched only %d rows — expected ~200 (one per country). SERIES_CODE format may have changed.",
+                 indicator_code, nrow(rows)))
+  }
+  long <- do.call(rbind, lapply(year_cols, function(y) {
+    df <- data.frame(
+      iso3c = rows$iso3c,
+      year  = as.integer(y),
+      stringsAsFactors = FALSE
+    )
+    df[[value_col]] <- suppressWarnings(as.numeric(rows[[y]]))
+    df
+  }))
+  long <- long[!is.na(long[[value_col]]), ]
+  long$source <- "IMF WEO April 2026 (data.imf.org bulk export)"
+  long
+}
 
-# Reshape to long form.
-weo_long <- do.call(rbind, lapply(year_cols, function(y) {
-  data.frame(
-    iso3c          = weo_wide$iso3c,
-    year           = as.integer(y),
-    cpi_inflation  = suppressWarnings(as.numeric(weo_wide[[y]])),
-    stringsAsFactors = FALSE
-  )
-}))
-weo_long <- weo_long[!is.na(weo_long$cpi_inflation), ]
-weo_long$source <- "IMF WEO April 2026 (data.imf.org bulk export)"
+weo_long          <- weo_extract("PCPIPCH",   "cpi_inflation")
+weo_gdp_growth    <- weo_extract("NGDP_RPCH", "gdp_growth")
+weo_gdp_per_cap   <- weo_extract("NGDPDPC",   "gdp_per_cap")
 
-cat("WEO long rows:", nrow(weo_long), "\n")
-cat("Distinct countries:", length(unique(weo_long$iso3c)), "\n")
-cat("Year span:", min(weo_long$year), "-", max(weo_long$year), "\n")
+cat("\nWEO PCPIPCH:  rows =", nrow(weo_long),
+    "  countries =", length(unique(weo_long$iso3c)),
+    "  year span =", min(weo_long$year), "-", max(weo_long$year), "\n")
+cat("WEO NGDP_RPCH: rows =", nrow(weo_gdp_growth),
+    "  countries =", length(unique(weo_gdp_growth$iso3c)),
+    "  year span =", min(weo_gdp_growth$year), "-", max(weo_gdp_growth$year), "\n")
+cat("WEO NGDPDPC:   rows =", nrow(weo_gdp_per_cap),
+    "  countries =", length(unique(weo_gdp_per_cap$iso3c)),
+    "  year span =", min(weo_gdp_per_cap$year), "-", max(weo_gdp_per_cap$year), "\n")
 ```
 
 ## Load Hanke inflation estimates
@@ -130,15 +171,19 @@ print(table(hanke$iso3c))
 ```{r}
 #| label: write
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
-dbWriteTable(con, "imf_inflation",   imf,      overwrite = TRUE)
-dbWriteTable(con, "imf_weo",         weo_long, overwrite = TRUE)
-dbWriteTable(con, "hanke_inflation", hanke,    overwrite = TRUE)
+dbWriteTable(con, "imf_inflation",        imf,              overwrite = TRUE)
+dbWriteTable(con, "imf_weo",              weo_long,         overwrite = TRUE)
+dbWriteTable(con, "imf_weo_gdp_growth",   weo_gdp_growth,   overwrite = TRUE)
+dbWriteTable(con, "imf_weo_gdp_pc",       weo_gdp_per_cap,  overwrite = TRUE)
+dbWriteTable(con, "hanke_inflation",      hanke,            overwrite = TRUE)
+dbWriteTable(con, "unemployment_curated", un,               overwrite = TRUE)
 dbGetQuery(con, "
-  SELECT 'imf_curated' AS source, COUNT(*) AS rows FROM imf_inflation
-  UNION ALL
-  SELECT 'imf_weo',     COUNT(*) FROM imf_weo
-  UNION ALL
-  SELECT 'hanke',       COUNT(*) FROM hanke_inflation
+  SELECT 'imf_curated'         AS source, COUNT(*) AS rows FROM imf_inflation
+  UNION ALL SELECT 'imf_weo',             COUNT(*) FROM imf_weo
+  UNION ALL SELECT 'imf_weo_gdp_growth',  COUNT(*) FROM imf_weo_gdp_growth
+  UNION ALL SELECT 'imf_weo_gdp_pc',      COUNT(*) FROM imf_weo_gdp_pc
+  UNION ALL SELECT 'hanke',               COUNT(*) FROM hanke_inflation
+  UNION ALL SELECT 'unemployment_curated', COUNT(*) FROM unemployment_curated
 ")
 ```
 

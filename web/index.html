@@ -115,21 +115,19 @@
     /* Indicator rows */
     .indicator-row {
       display: grid;
-      grid-template-columns: 1fr 100px 90px 110px;
+      grid-template-columns: 1fr 140px 110px;
       gap: 12px;
       align-items: center;
       padding: 14px 0;
       border-bottom: 1px solid var(--border-subtle);
     }
     .indicator-row .name { font-size: 16px; }
-    .indicator-row .value, .indicator-row .z {
+    .indicator-row .value {
       text-align: right;
       font-family: 'JetBrains Mono', monospace;
       font-size: 14px;
+      color: var(--ink);
     }
-    .indicator-row .value { color: var(--ink); }
-    .indicator-row .z { color: var(--ink-muted); font-size: 13px; }
-    .indicator-row .z::before { content: ''; }
     .indicator-row .direction { text-align: right; font-style: italic; font-size: 14px; color: var(--ink-muted); }
     .indicator-row.header { padding: 8px 0; }
     .indicator-row.header > div {
@@ -299,6 +297,10 @@
         lp += (coefs[f] || 0) * (zValues[f] || 0);
       }
       return sigmoid(lp);
+    }
+
+    function activeModel(country) {
+      return weights.pooled || weights.strata[country.regime_label];
     }
 
     // ------- main app -------
@@ -495,23 +497,15 @@
     }
 
     function renderIndicators(country) {
-      const stratum = weights.strata[country.regime_label];
-      const coefs = stratum.coefficients;
+      const model = activeModel(country);
+      const coefs = model.coefficients;
 
-      // Compute contributions for ALL features first, so we can scale the bar widths
       const contribs = [];
       for (const feat_name of weights.features) {
-        const raw_name = rawName(feat_name);
-        const f = country.features[raw_name];
-        const currentRaw = effectiveRawValue(country, raw_name);
-        const rawDisplay = formatRaw(raw_name, currentRaw);
-        const zValue = (f.mean != null && f.sd != null && f.sd !== 0)
-          ? effectiveZValue(country, raw_name) : 0;
-        const zDisplay = (f.mean != null && f.sd != null && f.sd !== 0)
-          ? `${sign(zValue)}${zValue.toFixed(1)}σ` : '—';
-        const modelInput = feat_name.startsWith('z_') ? zValue : currentRaw;
-        const contribution = (coefs[feat_name] || 0) * modelInput;
-        contribs.push({ feat_name, raw_name, rawDisplay, zDisplay, contribution });
+        const currentRaw = effectiveRawValue(country, feat_name);
+        const rawDisplay = formatRaw(feat_name, currentRaw);
+        const contribution = (coefs[feat_name] || 0) * currentRaw;
+        contribs.push({ feat_name, rawDisplay, contribution });
       }
       const maxAbs = Math.max(0.5, ...contribs.map(c => Math.abs(c.contribution)));
 
@@ -519,7 +513,6 @@
         `<div class="indicator-row header">
           <div class="name">Indicator</div>
           <div class="value">Value</div>
-          <div class="z">vs own past</div>
           <div class="direction">Effect</div>
         </div>`
       ];
@@ -545,7 +538,6 @@
               <div class="contrib-bar"><div class="midline"></div>${barFill}</div>
             </div>
             <div class="value">${c.rawDisplay}</div>
-            <div class="z">${c.zDisplay}</div>
             <div class="direction direction-${direction}"><span class="arrow">${arrow}</span>${verb}</div>
            </div>`
         );
@@ -556,137 +548,111 @@
     const INDICATOR_TOOLTIPS = {
       civil_liberties: "V-Dem civil-liberties index (0–1). Captures freedom of association, " +
                        "expression, movement. Higher = more free.",
-      z_gdp_growth:    "Annual GDP growth from World Bank WDI. Z-scored vs this country's own " +
-                       "history; negative = unusual contraction.",
-      z_cpi_inflation: "Annual CPI inflation rate (World Bank WDI). Region-median imputed where " +
-                       "countries don't report (e.g. Cuba). Z-scored within country.",
-      z_unemployment:  "Unemployment % of labor force (World Bank WDI). Z-scored within country.",
-      z_refugee_outflow: "Total refugees + asylum seekers originating from this country (UNHCR). " +
-                         "Log-transformed then z-scored vs country history.",
-      z_political_violence_ord: "V-Dem ordinal (0–3): how much political violence occurred this year " +
-                                "relative to this country's recent history.",
-      z_ffpi_avg:      "FAO Food Price Index annual mean (2014–16 = 100). Z-scored — captures global " +
-                       "food-price shock years (2008, 2011, 2022).",
-      z_coup_proof_fragmentation: "Pilster-Böhmelt effective-number of military forces. Higher = " +
-                                  "more fragmented security sector (coup-proofed); lower = unified."
+      log_gdp_per_cap: "World Bank GDP per capita, log-transformed. Higher development levels usually " +
+                       "lower baseline instability risk.",
+      loser_consent:   "V-Dem election-loser consent ordinal (0–4). Lower values indicate factional " +
+                       "politics and rejection of election outcomes.",
+      conflict_neighbors_count: "Count of same-region countries with UCDP fatalities ≥100 in the same " +
+                                "year. Proxy for conflict-ridden neighborhoods.",
+      gdp_growth:      "Annual GDP growth %, World Bank WDI. Negative = contraction.",
+      cpi_inflation:   "Annual CPI inflation rate %, World Bank WDI (with IMF curated + WEO fallback). " +
+                       "Clipped to [-10, 200]% to keep hyperinflation outliers from dominating the fit.",
+      unemployment:    "Unemployment % of labor force, World Bank WDI.",
+      log_refugee_outflow: "log1p(refugees + asylum seekers) originating from this country, UNHCR. " +
+                           "Log-transformed for cross-country comparability.",
+      political_violence_ord: "V-Dem ordinal (0–4) capturing how much political violence occurred this year.",
+      coup_proof_fragmentation: "Pilster-Böhmelt effective-number of military forces. Higher = " +
+                                "more fragmented security sector (coup-proofed); lower = unified."
+    };
+
+    // v0.4: each feature has its own raw display range. Civil_liberties is
+    // bounded [0,1]; ordinals are 0-4; %-features (growth, inflation,
+    // unemployment) use plausible economic ranges. No within-country mean/sd
+    // ships from the server anymore.
+    const SLIDER_RANGES = {
+      civil_liberties:          { lo: 0,     hi: 1,    step: 0.01 },
+      log_gdp_per_cap:          { lo: 5,     hi: 12,   step: 0.05 },
+      loser_consent:            { lo: 0,     hi: 4,    step: 1    },
+      conflict_neighbors_count: { lo: 0,     hi: 10,   step: 1    },
+      gdp_growth:               { lo: -25,   hi: 20,   step: 0.1  },
+      cpi_inflation:            { lo: -10,   hi: 200,  step: 0.5  },
+      unemployment:             { lo: 0,     hi: 40,   step: 0.1  },
+      political_violence_ord:   { lo: 0,     hi: 4,    step: 1    },
+      log_refugee_outflow:      { lo: 0,     hi: 16,   step: 0.1  },
+      coup_proof_fragmentation: { lo: 0.5,   hi: 5,    step: 0.05 }
     };
 
     function renderSliders(country) {
       const sliders = [];
       for (const feat_name of weights.features) {
-        const raw_name = rawName(feat_name);
-        const f = country.features[raw_name];
+        const f = country.features[feat_name];
         if (f.value == null) continue;
-        const cur = scenarioOverrides[raw_name] !== undefined ? scenarioOverrides[raw_name] : f.value;
-
-        // V-Dem indices like civil_liberties are bounded 0-1; political
-        // violence is ordinal 0-3. Other features use the country's own
-        // history range +/- 3 SDs.
-        let range_lo, range_hi, step;
-        const isVdemIdx = raw_name === 'civil_liberties' || raw_name === 'freedom_expression';
-        const isOrdinal = raw_name === 'political_violence_ord' || raw_name === 'regime_support_locus';
-        if (isVdemIdx) {
-          range_lo = 0; range_hi = 1; step = 0.01;
-        } else if (isOrdinal) {
-          range_lo = 0; range_hi = 4; step = 1;
-        } else if (f.mean != null && f.sd != null) {
-          range_lo = f.mean - 3 * f.sd;
-          range_hi = f.mean + 3 * f.sd;
-          step = Math.abs(f.sd / 20) || 0.01;
-        } else {
-          continue;  // can't make a sensible slider
-        }
+        const cur = scenarioOverrides[feat_name] !== undefined ? scenarioOverrides[feat_name] : f.value;
+        const r = SLIDER_RANGES[feat_name];
+        if (!r) continue;
 
         sliders.push(
           `<div class="slider-row">
             <div class="slider-label">
               <span>${weights.feature_labels[feat_name]}</span>
-              <span class="raw">${formatRaw(raw_name, cur)}</span>
+              <span class="raw">${formatRaw(feat_name, cur)}</span>
             </div>
-            <input type="range" min="${range_lo}" max="${range_hi}" step="${step}"
-                   value="${cur}" data-raw="${raw_name}" />
+            <input type="range" min="${r.lo}" max="${r.hi}" step="${r.step}"
+                   value="${cur}" data-feat="${feat_name}" />
           </div>`
         );
       }
       document.getElementById('sliders').innerHTML = sliders.join('');
       document.querySelectorAll('input[type=range]').forEach(el => {
         el.addEventListener('input', e => {
-          const raw = e.target.dataset.raw;
-          scenarioOverrides[raw] = parseFloat(e.target.value);
+          const feat = e.target.dataset.feat;
+          scenarioOverrides[feat] = parseFloat(e.target.value);
           recomputeProbability();
           renderIndicators(snapshot.countries[currentISO]);
           const lbl = e.target.parentElement.querySelector('.raw');
-          lbl.textContent = formatRaw(raw, parseFloat(e.target.value));
+          lbl.textContent = formatRaw(feat, parseFloat(e.target.value));
         });
       });
     }
 
-    // Get the effective raw value for a feature, applying Hanke override
-    // for cpi_inflation if the toggle is set.
-    function effectiveRawValue(country, raw_name) {
-      const f = country.features[raw_name];
-      if (scenarioOverrides[raw_name] !== undefined) return scenarioOverrides[raw_name];
-      if (raw_name === 'cpi_inflation' && inflationSource === 'hanke' &&
+    // Effective raw feature value, applying scenario override or Hanke
+    // inflation toggle when relevant.
+    function effectiveRawValue(country, feat_name) {
+      const f = country.features[feat_name];
+      if (scenarioOverrides[feat_name] !== undefined) return scenarioOverrides[feat_name];
+      if (feat_name === 'cpi_inflation' && inflationSource === 'hanke' &&
           hankeInflation && hankeInflation.countries[currentISO]) {
-        return hankeInflation.countries[currentISO].cpi_inflation;
+        // Hanke estimates are %; clip the same way the training pipeline does.
+        const hk = hankeInflation.countries[currentISO].cpi_inflation;
+        return Math.max(-10, Math.min(200, hk));
       }
       return f.value;
     }
 
-    // Get the effective z-score for a feature in the current scoring
-    // scenario. Single source of truth on the client side: this function
-    // is called from both renderIndicators (display) and
-    // recomputeProbability (model scoring). The winsorize bound is read
-    // from weights.winsorize_bound so the server's z_within() helper in
-    // training/_helpers.R is the single source of truth for the bound.
-    //
-    // When no override is active (raw value === snapshot value), we use
-    // the server-precomputed z directly. When an override is active, we
-    // recompute z client-side using the country's stored mean + sd.
-    function effectiveZValue(country, raw_name) {
-      const f = country.features[raw_name];
-      const currentRaw = effectiveRawValue(country, raw_name);
-      if (currentRaw === f.value) return f.z;  // no override: trust server z
-      if (f.mean == null || !f.sd) return f.z;  // can't recompute, fall back
-      const bound = (weights && weights.winsorize_bound) || 3;
-      const z = (currentRaw - f.mean) / f.sd;
-      return Math.max(-bound, Math.min(bound, z));
-    }
-
     function recomputeProbability() {
       const country = snapshot.countries[currentISO];
-      const stratum = weights.strata[country.regime_label];
+      const model = activeModel(country);
       const featureValues = {};
       for (const feat_name of weights.features) {
-        const raw_name = rawName(feat_name);
-        // Level features (e.g. civil_liberties) feed raw value into the
-        // linear predictor; z-scored features feed the z. effectiveZValue
-        // and effectiveRawValue both handle override / Hanke logic.
-        featureValues[feat_name] = feat_name.startsWith('z_')
-          ? effectiveZValue(country, raw_name)
-          : effectiveRawValue(country, raw_name);
+        featureValues[feat_name] = effectiveRawValue(country, feat_name);
       }
-      const p = scoreLinear(stratum.coefficients, stratum.feature_order, featureValues);
+      const p = scoreLinear(model.coefficients, model.feature_order, featureValues);
       const isScenario = Object.keys(scenarioOverrides).length > 0 || inflationSource === 'hanke';
       document.getElementById('big-number').textContent = fmt(p);
       document.getElementById('prob-section').classList.toggle('recomputed', isScenario);
     }
 
-    function rawName(z_name) {
-      // z_civil_liberties -> civil_liberties
-      return z_name.replace(/^z_/, '');
-    }
-
-    function formatRaw(raw_name, value) {
+    function formatRaw(feat_name, value) {
       if (value == null) return '—';
-      const pctFeatures = ['gdp_growth', 'cpi_inflation', 'trade_pct_gdp', 'unemployment'];
-      const intFeatures = ['refugee_outflow'];
-      const vdemIdx    = ['civil_liberties', 'freedom_expression'];
-      const ordinals   = ['political_violence_ord', 'regime_support_locus'];
-      if (pctFeatures.includes(raw_name)) return value.toFixed(2) + '%';
-      if (intFeatures.includes(raw_name)) return Math.round(value).toLocaleString();
-      if (vdemIdx.includes(raw_name))     return value.toFixed(2);          // 0-1 V-Dem index
-      if (ordinals.includes(raw_name))    return Math.round(value).toString();
+      const pctFeatures = ['gdp_growth', 'cpi_inflation', 'unemployment'];
+      const intFeatures = ['conflict_neighbors_count'];
+      const ordinals    = ['political_violence_ord', 'loser_consent'];
+      if (pctFeatures.includes(feat_name)) return value.toFixed(2) + '%';
+      if (intFeatures.includes(feat_name)) return Math.round(value).toLocaleString();
+      if (feat_name === 'civil_liberties') return value.toFixed(2);
+      if (ordinals.includes(feat_name))    return Math.round(value).toString();
+      if (feat_name === 'log_gdp_per_cap') return `log(USD) ${value.toFixed(2)}`;
+      if (feat_name === 'log_refugee_outflow') return `log(persons) ${value.toFixed(2)}`;
       return value.toFixed(2);
     }
 
@@ -700,15 +666,16 @@
            <code>v2cagenmob_ord ≥ 4</code> classification (the latter only as a fallback after MMP ends in 2020).</p>
 
         <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">How</h3>
-        <p>Four separate logistic regressions — one per V-Dem Regimes-of-the-World category (closed
-           autocracy, electoral autocracy, electoral democracy, liberal democracy). The intercept captures
-           the baseline rate for that regime type; coefficients say how much each indicator nudges the
-           probability up or down.</p>
-        <p><strong>Features:</strong> civil_liberties is used as a raw 0–1 level (so the model sees that UK
-           = 0.88 ≠ Cuba = 0.30 in absolute terms). The other features are z-scored within country
-           (winsorized at ±3 SDs) so the model interprets each shock relative to the country's own history.
-           refugee_outflow is log-transformed before z-scoring because its raw distribution is heavily
-           skewed.</p>
+        <p>The headline forecast uses one pooled <strong>LASSO logistic regression</strong> trained
+           on 1995–2022 country-years. Every feature enters as a <strong>raw cross-country level</strong>
+           (no within-country z-scoring) — the model answers "given a country with these characteristics,
+           what fraction of similar country-years in history saw sustained mass unrest the following year?"
+           This is the PITF/Goldstone framing.</p>
+        <p><strong>Features:</strong> civil liberties (V-Dem 0–1), log GDP per capita, election-loser
+           consent (V-Dem 0–4), regional conflict count, GDP growth %, CPI inflation % (clipped to
+           [−10, 200] to handle hyperinflation tails), unemployment %, political violence ordinal (0–4),
+           log refugee outflow, and Pilster-Böhmelt coup-proofing fragmentation.
+           Per-regime models are retained in the artifact for within-regime reference-class context.</p>
 
         <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">Sources</h3>
         <ul style="margin-left:16px; margin-top:4px;">
@@ -720,8 +687,8 @@
           <li><strong>Mass Mobilization Project</strong> (Clark & Regan) — large-protest events 1990–2020</li>
           <li><strong>UCDP GED v25.1</strong> (Uppsala) — armed-conflict fatalities 1989–2024</li>
           <li><strong>Cline Center Coup d'État Project</strong> — coup attempts 1945–2026</li>
-          <li><strong>Fariss latent human-rights scores</strong> — loaded into the panel; not used in v0 fit (collinearity with V-Dem civil_liberties)</li>
-          <li><strong>Polity5</strong> — loaded into the panel; not used in v0 fit (collinearity with V-Dem civil_liberties)</li>
+          <li><strong>Fariss latent human-rights scores</strong> — loaded into the panel; excluded from the current fit (collinearity with V-Dem civil_liberties)</li>
+          <li><strong>Polity5</strong> — loaded into the panel; excluded from the current fit (collinearity with V-Dem civil_liberties)</li>
         </ul>
 
         <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">Calibration</h3>
@@ -740,7 +707,7 @@
         <ul style="margin-left:16px; margin-top:4px;">
           <li>Predict <strong>black swans</strong> — Tunisia 2011, Sri Lanka 2022 — by definition unprecedented</li>
           <li>Predict <strong>short-horizon shifts</strong> — features are annual, so we can't detect monthly escalations</li>
-          <li>Capture <strong>country-specific dynamics</strong> not in our 8 features (e.g., specific dynasty politics, religious/ethnic tensions)</li>
+          <li>Capture <strong>country-specific dynamics</strong> not in the model features (e.g., specific dynasty politics, religious/ethnic tensions)</li>
           <li>Be a <strong>policy recommendation</strong> — it's a probability estimate, not a prescription</li>
         </ul>
 

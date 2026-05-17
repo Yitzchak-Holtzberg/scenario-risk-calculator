@@ -2,18 +2,14 @@
 # Shared utilities sourced from each .qmd's setup chunk:
 #   source("_helpers.R")
 #
-# Three things live here:
+# v0.4: z_within() and SRS_WINSORIZE_BOUND are gone — the model uses raw
+# cross-country feature levels. Notebooks that need to clip outliers do so
+# inline (see 08_build_panel.qmd for cpi_inflation clipping).
+#
+# Two things live here:
 #   - srs_palette  : color constants matching the dashboard
 #   - srs_theme()  : ggplot theme block used in every plot-bearing notebook
-#   - z_within()   : within-country z-score with NA-safety + winsorization
 #   - cow_to_iso3(): countrycode wrapper, COW numeric -> ISO3 alpha-3
-#
-# IMPORTANT: SRS_WINSORIZE_BOUND below MUST match the same constant in
-# web/index.html's `effectiveZValue` function. Both compute the same z and
-# clip to the same range. The bound is also serialized into weights.json so
-# the dashboard reads it from there at runtime (single source of truth).
-
-SRS_WINSORIZE_BOUND <- 3
 
 srs_palette <- list(
   parchment = "#F8F3E8",
@@ -39,20 +35,6 @@ srs_theme <- function(base_size = 12) {
       axis.title       = ggplot2::element_text(color = srs_palette$ink),
       plot.caption     = ggplot2::element_text(color = srs_palette$ink_muted, face = "italic")
     )
-}
-
-# Within-country z-score. NA-safe; returns NAs when too few non-missing obs.
-# Winsorizes at +/-SRS_WINSORIZE_BOUND so a country with a tiny historical
-# baseline (e.g., UK's near-zero refugee outflow) doesn't blow up when a
-# small absolute number arrives. The dashboard's `effectiveZValue` mirrors
-# this logic - they must stay in sync via weights.winsorize_bound.
-z_within <- function(x, min_obs = 5) {
-  if (sum(!is.na(x)) < min_obs) return(rep(NA_real_, length(x)))
-  m <- mean(x, na.rm = TRUE)
-  s <- sd(x, na.rm = TRUE)
-  if (is.na(s) || s == 0) return(rep(0, length(x)))
-  z <- (x - m) / s
-  pmin(pmax(z, -SRS_WINSORIZE_BOUND), SRS_WINSORIZE_BOUND)
 }
 
 # Convenience wrapper around countrycode for the common COW->ISO3 conversion.

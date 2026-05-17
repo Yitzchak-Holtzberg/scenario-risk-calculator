@@ -15,11 +15,18 @@ Mobilization Project (Harvard Dataverse). Each row = one protest event with
 size, violence, and date fields. We aggregate to **country-year counts**:
 
 - `n_protests` — total protests this year
-- `n_large_protests` — protests with `participants_category` indicating ≥1,000 (i.e., "1000s", "10000s", "100000s", "millions")
+- `n_large_protests` — protests where `participants ≥ 0.1% of population`.
+  Per-capita threshold, not absolute. v0.5.1 fix: previous version flagged
+  any protest ≥1,000 participants ("Tuesday outside a courthouse" in big
+  countries) or ≥10,000 (rounding error in India, but a mass event in
+  Iceland). 0.1% of population catches Yellow Vests France (0.4%), Iran 2022
+  Hijab protests (0.1–1%), Iceland 2008 (2.2%), HK 2019 (27%), USA BLM 2020
+  (5–8%); excludes routine US/UK/EU rallies that don't destabilize regimes.
+  We use MMP's bucket lower bound as a conservative participant estimate.
 - `n_violent_protests` — protests where `protesterviolence = 1`
 
 Outcome use (in `09_label_events.qmd`): a country-year is flagged as unrest
-if it has any `large_protest` next year.
+if it has any per-capita-large protest next year.
 
 ## Libraries
 
@@ -54,17 +61,62 @@ cat("Raw events:", nrow(mmp), " | Year range:", range(mmp$year, na.rm = TRUE), "
 table(mmp$participants_category, useNA = "ifany")
 ```
 
-The size buckets we treat as "large" (≥1,000 participants):
+### Per-capita "large protest" threshold (calibrated to Iran 2022 WLF baseline)
+
+A 1,000-person rally is a meaningful national event in Iceland (0.26% of
+population) but rounding-error in India (0.00007%). We need a per-capita
+threshold, not an absolute one.
+
+**Threshold: 0.1% of population.** Calibrated to Iran's 2022 Woman-Life-Freedom
+protest baseline (single-event peaks ~0.1–1% of national population). At
+this threshold, the following events get flagged: Yellow Vests France 2018
+(0.4%), Hong Kong 2019 (27%), Iceland 2008 (2.2%), US BLM 2020 (5–8%), Iran
+2009 Green Movement peak (0.68%), Lebanon 2019 (14.7%). Routine 1k-vigil
+events in large countries are correctly excluded.
+
+We pull WDI population per (iso3c, year), use MMP's bucket lower bound as
+a conservative participant estimate, and flag events where
+`bucket_lower_bound / population ≥ 0.001`.
 
 ```{r}
 #| label: aggregate
-large_buckets <- c("1000s", "10000s", "100000s", "millions",
-                   "1000-1999", "2000-9999")
+size_buckets <- c("1000-1999", "2000-4999", "5000-10000", ">10000")
+bucket_lower <- c("1000-1999" = 1000, "2000-4999" = 2000,
+                  "5000-10000" = 5000, ">10000" = 10000)
 
-mmp$is_large   <- mmp$participants_category %in% large_buckets
+present <- intersect(size_buckets, unique(mmp$participants_category))
+if (length(present) < length(size_buckets)) {
+  stop(sprintf(
+    "MMP participants_category schema drift: expected %s, found %s in data. Update size_buckets.",
+    paste(size_buckets, collapse = ", "),
+    paste(present, collapse = ", ")
+  ))
+}
+
 mmp$is_violent <- mmp$protesterviolence == 1
 mmp$iso3c <- cow_to_iso3(mmp$ccode)
 mmp <- mmp[!is.na(mmp$iso3c), ]
+
+# Per-event participant lower bound; events with no bucket info are 0
+# (won't ever clear the threshold).
+mmp$participants_lower <- bucket_lower[mmp$participants_category]
+mmp$participants_lower[is.na(mmp$participants_lower)] <- 0
+
+# Pull WDI population and join.
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+wdi_pop <- dbGetQuery(con, "SELECT iso3c, year, population FROM wdi WHERE population IS NOT NULL")
+dbDisconnect(con, shutdown = TRUE)
+
+mmp <- merge(mmp, wdi_pop, by = c("iso3c", "year"), all.x = TRUE)
+mmp$participants_pct <- mmp$participants_lower / mmp$population
+
+# 0.1% of population = WLF baseline. Skip events where we don't have
+# population data (covers a tiny number of historical edge cases).
+PROTEST_PCT_THRESHOLD <- 0.001
+mmp$is_large <- !is.na(mmp$participants_pct) & mmp$participants_pct >= PROTEST_PCT_THRESHOLD
+
+cat("Events meeting per-capita threshold:", sum(mmp$is_large), "of", nrow(mmp), "\n")
+cat("Events without population data (excluded):", sum(is.na(mmp$participants_pct)), "\n")
 
 mmp_annual <- aggregate(
   cbind(n_protests = rep(1, nrow(mmp)),

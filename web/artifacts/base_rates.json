@@ -1,30 +1,30 @@
 {
-  "model_version": "unrest-risk-v0.2-ridge",
-  "train_years": [1995, 2022],
+  "model_version": "unrest-risk-v0.5-monotonic-constrained",
+  "train_years": [1996, 2022],
   "regimes": {
     "closed_autocracy": {
       "regime_code": 0,
-      "n_obs": 752,
-      "n_unrest": 174,
-      "base_rate": 0.2314
+      "n_obs": 261,
+      "n_unrest": 22,
+      "base_rate": 0.0843
     },
     "electoral_autocracy": {
       "regime_code": 1,
-      "n_obs": 1626,
-      "n_unrest": 520,
-      "base_rate": 0.3198
+      "n_obs": 1434,
+      "n_unrest": 470,
+      "base_rate": 0.3278
     },
     "electoral_democracy": {
       "regime_code": 2,
-      "n_obs": 1419,
-      "n_unrest": 284,
-      "base_rate": 0.2001
+      "n_obs": 1224,
+      "n_unrest": 286,
+      "base_rate": 0.2337
     },
     "liberal_democracy": {
       "regime_code": 3,
-      "n_obs": 1099,
-      "n_unrest": 125,
-      "base_rate": 0.1137
+      "n_obs": 1013,
+      "n_unrest": 80,
+      "base_rate": 0.079
     }
   }
 }

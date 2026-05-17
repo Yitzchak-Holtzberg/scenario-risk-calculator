@@ -1,5 +1,5 @@
 ---
-title: "10 — Fit the regime-stratified ridge logistic regression"
+title: "10 — Fit regularized unrest-risk models"
 format:
   html:
     toc: true
@@ -10,52 +10,63 @@ execute:
   message: false
 ---
 
-Four separate ridge logistic regressions (one per V-Dem RoW regime category)
-predicting `unrest_next_year`. Lambda chosen per stratum via `cv.glmnet`.
+**v0.5 architecture** (extends v0.4 cross-sectional PITF framing):
+
+- One pooled **LASSO** logistic regression on **raw cross-country feature
+  levels** (no within-country z-scoring; no regime dummies — civil_liberties
+  is the regime-quality channel).
+- **Monotonicity constraints** on every coefficient: each feature is forced
+  to the sign its substantive interpretation requires. Fixes the v0.4
+  problem where closedness-under-reporting bias was making civil_liberties
+  β = +0.73 ("more civil liberties → more reported unrest") even though
+  the structural reading is the opposite.
+- **`political_violence_ord` is lagged by 1 year** (`political_violence_ord_lag1`
+  in features). The v0.4 unlagged version overlapped with the outcome label
+  (our `unrest_next_year` includes the post-2020 V-Dem `v2cagenmob_ord >= 4`
+  fallback) — concurrent violence was partly predicting itself. Two-year gap.
+- **`lambda.min` instead of `lambda.min`** — stronger regularization, fewer
+  surviving features, more honest about what's actually predictive.
+- **Curated unemployment for state-managed economies** (Cuba, Belarus, PRK,
+  Venezuela, Eritrea, Turkmenistan, Cambodia, Laos) via the COALESCE chain
+  in `08_build_panel.qmd`. The official ILO/WDI rate doesn't reflect
+  informal-sector / underemployment reality for these countries.
+
 Coefficients persist with a **bootstrap-derived empirical covariance** in
 place of `vcov()` (penalized estimators don't have a closed-form sampling
-distribution); the dashboard still samples 90% CIs from `MVN(coef, cov)`,
-just from the empirical cov.
+distribution). The bootstrap fits use the same `lambda.min` and monotonicity
+constraints as the headline fit.
 
-**Features (11):**
+**Features (10), all raw cross-country levels:**
 
-*Absolute-level* — "where this country sits structurally":
-- `civil_liberties` — V-Dem 0–1 index
-- `fariss_hr_score` — Fariss latent human-rights protection (added v0.2)
-- `polity2` — Polity5 democracy–autocracy score (added v0.2)
+| Feature | Source | Constraint |
+|---|---|---|
+| `civil_liberties` | V-Dem 0–1 | β ≤ 0 |
+| `log_gdp_per_cap` | log WDI/WEO GDP per capita | β ≤ 0 |
+| `loser_consent` | V-Dem `v2elaccept_ord`, 0–4 | β ≤ 0 |
+| `conflict_neighbors_count` | UCDP-derived (lag-1) | β ≥ 0 |
+| `gdp_growth` | WDI/WEO annual % | β ≤ 0 |
+| `cpi_inflation` | WDI/IMF chain, clipped [−10, 200] | β ≥ 0 |
+| `unemployment` | WDI/ILO + curated supplement for state-managed economies | β ≥ 0 |
+| `political_violence_ord_lag1` | V-Dem 0–4, lagged by 1 year | β ≥ 0 |
+| `log_refugee_outflow` | UNHCR log1p | β ≥ 0 |
+| `coup_proof_fragmentation` | Pilster-Böhmelt | β ≥ 0 |
 
-*Within-country z* — "how stressed vs the country's own history":
-- `z_gdp_growth` — economic shock
-- `z_cpi_inflation` — inflation shock (CPI sourced via WDI → IMF-curated → IMF WEO chain in `08_build_panel.qmd`; region-median imputed only for ~5% of training rows, flagged below)
-- `z_unemployment` — labor-market shock
-- `z_refugee_outflow` — population-leaving shock (log1p before z)
-- `z_political_violence_ord` — recent violence vs own norm
-- `z_ffpi_avg` — global food-price pressure
-- `z_coup_proof_fragmentation` — Pilster-Böhmelt effective-number of forces
-
-*Imputation indicator* — added v0.3 after we found the listwise filter below
-was a silent no-op (every NA had been region-median imputed upstream, so
-countries with no real CPI source — PRK/SOM pre-2013/parts of ERI/TKM —
-were entering training with synthetic neighborhood values masquerading as
-signal):
-- `cpi_imputed` — 1 when no real CPI source (WDI/IMF-curated/IMF-WEO)
-  existed for this country-year. Lets the model learn that imputed-CPI
-  rows are a distinct subpopulation.
-
-Z-scores are winsorized at ±3 SDs (in `08_build_panel.qmd`) so countries
-with tiny historical baselines (e.g., UK's near-zero refugee outflow) don't
-blow up when a small absolute number arrives.
-
-The hybrid (levels for structural regime signals, z-scores for dynamic
-economic/conflict signals) captures both "where this country sits" and "how
-it's moving." Three regime-quality levels (civil_liberties, Fariss, polity2)
-are correlated; ridge keeps them all without the collinear sign-flip that
-killed an unpenalized fit (skill 0.044 → 0.007 with Fariss naively added).
-
-de Bruin's `counterbalancing` and `politicization` remain excluded: source
-coverage ends 2010 and a 14-year carry to 2024 isn't defensible.
+**Training set filter:** listwise-drop rows where `cpi_imputed = 1`
+(country-year had no real CPI source — WDI/IMF-curated/IMF WEO — and
+inflation was region-median imputed). Avoids fitting on synthetic inflation
+for PRK, pre-2018 Cuba, Somalia, etc. `cpi_imputed` is preserved as a
+data-quality flag in the dashboard, not as a model feature.
 
 **Train/test:** train on 1995–2022; predict unrest in 2023 on holdout 2023.
+
+**v0.4 deletions from v0.3:** within-country z-scoring; `z_ffpi_avg` (global
+food-price index identical across countries in a given year — no
+cross-sectional variation); the `factor(regime_type)` dummies in the
+pooled formula (collinear with civil_liberties).
+
+de Bruin's `counterbalancing` / `politicization` and Fariss / Polity2 remain
+loaded in the panel for analysis but are excluded from the fit (Fariss/Polity
+correlate ~0.9 with civil_liberties; de Bruin source ends 2010).
 
 ## Libraries
 
@@ -73,20 +84,21 @@ library(glmnet)
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
 
 features <- c(
-  # Absolute level — structural (three correlated regime-quality signals;
-  # ridge keeps all three without collinear sign-flip)
-  "civil_liberties", "fariss_hr_score", "polity2",
-  # Economic stress (within-country z, region-median-imputed)
-  "z_gdp_growth", "z_cpi_inflation", "z_unemployment",
-  # Political stress
-  "z_political_violence_ord",
-  # External / structural
-  "z_refugee_outflow", "z_ffpi_avg", "z_coup_proof_fragmentation",
-  # Imputation indicator (binary, used raw — not z-scored)
-  "cpi_imputed"
+  "civil_liberties", "log_gdp_per_cap", "loser_consent",
+  "conflict_neighbors_count",
+  "gdp_growth", "cpi_inflation", "unemployment",
+  "political_violence_ord_lag1",
+  "log_refugee_outflow", "coup_proof_fragmentation"
 )
+# v0.4: raw cross-country levels only. No within-country z's. No regime
+# dummies in the pooled formula (civil_liberties is the regime-quality
+# channel). cpi_inflation is clipped at [-10, 200]% in 08; log_refugee_outflow
+# is log1p-transformed in 08. cpi_imputed is pulled separately to listwise-drop
+# training rows where the CPI was region-median imputed — it is NOT a model
+# feature (would absorb the closedness→under-reporting measurement bias).
 
-needed_cols <- paste(c("iso3c", "year", "regime_type", "unrest_next_year", features), collapse = ", ")
+needed_cols <- paste(c("iso3c", "year", "regime_type", "unrest_next_year",
+                       "cpi_imputed", features), collapse = ", ")
 panel <- dbGetQuery(con, sprintf("SELECT %s FROM panel_labeled", needed_cols))
 dbDisconnect(con, shutdown = TRUE)
 
@@ -97,21 +109,30 @@ cat("Rows with non-NA outcome:", sum(!is.na(panel$unrest_next_year)), "\n")
 ## Filter to complete cases for fitting
 
 The model needs every feature present plus a valid outcome and regime
-category. Listwise deletion is the simplest reasonable default for v0.
+category. We *also* drop rows where `cpi_imputed = 1` — i.e. country-years
+whose CPI came from region-median imputation rather than a real source.
+See header prose for why: those rows are concentrated in closed autocracies
+where event-based outcome labels are also under-reported, so keeping them
+in would let the model fit a measurement-bias correlation rather than real
+signal.
 
 ```{r}
 #| label: filter
-complete <- panel[complete.cases(panel[, c("regime_type", "unrest_next_year", features)]), ]
+feature_complete <- complete.cases(panel[, c("regime_type", "unrest_next_year", features)])
+real_cpi         <- panel$cpi_imputed == 0
+complete <- panel[feature_complete & real_cpi, ]
 train <- complete[complete$year <= 2022, ]
 holdout <- complete[complete$year == 2023, ]
 
+n_dropped_for_imputed_cpi <- sum(feature_complete & !real_cpi & panel$year <= 2022)
 cat("Train rows: ", nrow(train),
-    "  | unrest rate:", round(mean(train$unrest_next_year), 3), "\n")
+    "  | unrest rate:", round(mean(train$unrest_next_year), 3),
+    "  | dropped for imputed CPI:", n_dropped_for_imputed_cpi, "\n")
 cat("Holdout rows:", nrow(holdout),
     "  | unrest rate:", round(mean(holdout$unrest_next_year), 3), "\n")
 ```
 
-## Fit one ridge model per regime stratum
+## Fit one LASSO model per regime stratum
 
 For each stratum: pick lambda via `cv.glmnet` on the full stratum, then
 nonparametric-bootstrap the rows (stratified on the outcome to preserve
@@ -130,8 +151,46 @@ regime_labels <- c("0" = "closed_autocracy",
                    "3" = "liberal_democracy")
 
 B_bootstrap <- 500
-alpha_ridge <- 0  # pure ridge
+# LASSO (alpha = 1) for systematic feature selection: features whose
+# coefficient is exactly zero at lambda.min did not earn their place
+# in the CV-deviance budget. We use lambda.min (more regularization)
+# instead of lambda.min so coefficients must defend themselves against
+# stronger shrinkage. v0.2 used ridge (alpha = 0); v0.3+ uses LASSO.
+alpha_fit <- 1
 set.seed(20260517)
+
+# v0.5: monotonicity constraints on coefficients. Forces structural
+# anchors to the sign their substantive interpretation requires, even
+# when training data correlations would push the other way (e.g.,
+# closedness-under-reporting bias was making civil_liberties +0.73,
+# saying "more civil liberties = more reported unrest"). Constraints
+# apply on the *original* (unstandardized) coefficient scale; glmnet
+# handles standardization internally and de-standardizes the returned
+# coefficients, so constraints work directly.
+# Monotonicity constraints in features-vector order.
+# Sign:  -1 = β ≤ 0 required;  +1 = β ≥ 0 required.
+# Lower/upper limits per coefficient passed to glmnet as plain numeric
+# vectors (no names, no NAs).
+feature_signs <- c(-1, -1, -1, +1, -1, +1, +1, +1, +1, +1)
+names(feature_signs) <- c("civil_liberties", "log_gdp_per_cap", "loser_consent",
+                          "conflict_neighbors_count", "gdp_growth", "cpi_inflation",
+                          "unemployment", "political_violence_ord_lag1",
+                          "log_refugee_outflow", "coup_proof_fragmentation")
+stopifnot(setequal(names(feature_signs), features))
+
+build_limits <- function(design_cols) {
+  # Verify every design-matrix column has a defined sign — fail loudly
+  # rather than passing NA into glmnet (where the error is opaque).
+  missing_signs <- setdiff(design_cols, names(feature_signs))
+  if (length(missing_signs) > 0) {
+    stop("Design-matrix columns without a defined sign: ",
+         paste(missing_signs, collapse = ", "))
+  }
+  signs <- as.numeric(feature_signs[design_cols])  # plain numeric, no names
+  lower <- rep(-Inf, length(signs)); lower[signs == +1] <- 0
+  upper <- rep( Inf, length(signs)); upper[signs == -1] <- 0
+  list(lower = lower, upper = upper)
+}
 
 models <- list()
 fit_summary <- data.frame()
@@ -149,12 +208,17 @@ for (k in 0:3) {
   x  <- mm[, -1, drop = FALSE]
   y  <- stratum$unrest_next_year
 
+  # Monotonicity constraints in column order of the design matrix.
+  lims <- build_limits(colnames(x))
+
   # Fewer CV folds when events are sparse so each fold sees ≥3 events.
   n_events <- sum(y == 1)
   nfolds   <- if (n_events < 30) 5 else 10
 
   fit_cv      <- cv.glmnet(x, y, family = "binomial",
-                           alpha = alpha_ridge, nfolds = nfolds)
+                           alpha = alpha_fit, nfolds = nfolds,
+                           lower.limits = lims$lower,
+                           upper.limits = lims$upper)
   lambda_best <- fit_cv$lambda.min
 
   coef_full  <- as.numeric(coef(fit_cv, s = "lambda.min"))
@@ -171,8 +235,10 @@ for (k in 0:3) {
     rows <- c(sample(idx_pos, length(idx_pos), replace = TRUE),
               sample(idx_neg, length(idx_neg), replace = TRUE))
     fit_b <- glmnet(x[rows, , drop = FALSE], y[rows],
-                    family = "binomial", alpha = alpha_ridge,
-                    lambda = lambda_best)
+                    family = "binomial", alpha = alpha_fit,
+                    lambda = lambda_best,
+                    lower.limits = lims$lower,
+                    upper.limits = lims$upper)
     boot_coefs[b, ] <- as.numeric(coef(fit_b))
   }
   coef_mean <- colMeans(boot_coefs)
@@ -207,9 +273,112 @@ for (k in 0:3) {
 fit_summary
 ```
 
+## Fit pooled LASSO (primary cross-country model)
+
+The stratified fits above provide within-regime context for analysts. The
+**pooled fit is the headline model**: a single LASSO across all countries
+where `civil_liberties` is the only regime-quality channel — no regime
+dummies. Same bootstrap-empirical-cov procedure as the stratified fits.
+
+```{r}
+#| label: fit-pooled
+pool_form <- as.formula(paste(
+  "unrest_next_year ~",
+  paste(features, collapse = " + ")
+))
+mm_pool <- model.matrix(pool_form, train)
+x_pool  <- mm_pool[, -1, drop = FALSE]
+y_pool  <- train$unrest_next_year
+
+lims_pool <- build_limits(colnames(x_pool))
+
+fit_pool_cv  <- cv.glmnet(x_pool, y_pool, family = "binomial",
+                          alpha = alpha_fit, nfolds = 10,
+                          lower.limits = lims_pool$lower,
+                          upper.limits = lims_pool$upper)
+lambda_pool  <- fit_pool_cv$lambda.min
+
+coef_pool       <- as.numeric(coef(fit_pool_cv, s = "lambda.min"))
+coef_pool_names <- rownames(coef(fit_pool_cv, s = "lambda.min"))
+names(coef_pool) <- coef_pool_names
+
+# Bootstrap pooled coefficients at the chosen lambda.
+idx_pos_p <- which(y_pool == 1)
+idx_neg_p <- which(y_pool == 0)
+boot_pool <- matrix(NA_real_, nrow = B_bootstrap, ncol = length(coef_pool),
+                    dimnames = list(NULL, coef_pool_names))
+for (b in seq_len(B_bootstrap)) {
+  rows <- c(sample(idx_pos_p, length(idx_pos_p), replace = TRUE),
+            sample(idx_neg_p, length(idx_neg_p), replace = TRUE))
+  fit_b <- glmnet(x_pool[rows, , drop = FALSE], y_pool[rows],
+                  family = "binomial", alpha = alpha_fit,
+                  lambda = lambda_pool,
+                  lower.limits = lims_pool$lower,
+                  upper.limits = lims_pool$upper)
+  boot_pool[b, ] <- as.numeric(coef(fit_b))
+}
+coef_pool_vcov <- cov(boot_pool) + diag(1e-8, length(coef_pool))
+
+pooled_model <- list(
+  fit_cv        = fit_pool_cv,
+  lambda        = lambda_pool,
+  formula       = pool_form,
+  feature_order = coef_pool_names,
+  coefficients  = coef_pool,
+  vcov          = coef_pool_vcov,
+  n_train       = nrow(train),
+  n_events      = sum(y_pool == 1),
+  n_bootstrap   = B_bootstrap
+)
+
+cat("Pooled fit:\n")
+cat("  lambda:    ", signif(lambda_pool, 3), "\n")
+cat("  n_train:   ", nrow(train), "\n")
+cat("  n_events:  ", sum(y_pool == 1), "\n")
+cat("  features:  ", length(coef_pool) - 1, "\n")
+```
+
+## Inspect pooled coefficients
+
+These apply to ALL countries. Civil liberties carries the regime-quality
+signal; log GDP per capita carries the development/wealth signal; the rest
+are economic and political stress levels.
+
+```{r}
+#| label: coef-pooled
+co_pool <- data.frame(
+  estimate = pooled_model$coefficients,
+  boot_sd  = sqrt(diag(pooled_model$vcov))
+)
+round(co_pool, 3)
+```
+
+## LASSO feature-survival report
+
+Features whose coefficient is exactly zero at `lambda.min` were dropped by
+LASSO under the v0.5 monotonicity constraints. Note: a zeroed coefficient
+under monotonicity means EITHER (a) the feature didn't pay its way in
+CV-deviance, OR (b) the unconstrained fit wanted the wrong sign and the
+constraint pushed it to zero. Both are valid reasons to drop.
+
+```{r}
+#| label: lasso-survival
+pool_coef_vec <- pooled_model$coefficients
+is_intercept <- names(pool_coef_vec) == "(Intercept)"
+covariate_coefs <- pool_coef_vec[!is_intercept]
+
+survived <- names(covariate_coefs)[covariate_coefs != 0]
+dropped  <- names(covariate_coefs)[covariate_coefs == 0]
+
+cat("Survived LASSO (", length(survived), "of", length(covariate_coefs), "):\n")
+for (f in survived) cat("  ", f, "  beta =", round(covariate_coefs[[f]], 4), "\n")
+cat("\nDropped by LASSO (beta exactly 0):\n")
+for (f in dropped)  cat("  ", f, "\n")
+```
+
 ## Inspect coefficients (closed autocracy)
 
-Ridge has no closed-form coefficient SE — show point estimate alongside
+LASSO has no closed-form coefficient SE — show point estimate alongside
 the bootstrap SD (sqrt of the empirical-cov diagonal).
 
 ```{r}
@@ -219,7 +388,6 @@ co <- data.frame(
   estimate = ca$coefficients,
   boot_sd  = sqrt(diag(ca$vcov))
 )
-rownames(co) <- gsub("^z_", "", rownames(co))
 round(co, 3)
 ```
 
@@ -232,7 +400,6 @@ co <- data.frame(
   estimate = ea$coefficients,
   boot_sd  = sqrt(diag(ea$vcov))
 )
-rownames(co) <- gsub("^z_", "", rownames(co))
 round(co, 3)
 ```
 
@@ -246,13 +413,19 @@ can load them without re-fitting.
 dir.create("../data/model", showWarnings = FALSE, recursive = TRUE)
 saveRDS(
   list(
+    # Pooled model is the primary "absolute likelihood" scorer that the
+    # dashboard uses for the headline probability. Per-stratum models are
+    # retained for secondary analyst context (within-regime ranking) but
+    # never drive the dashboard's primary number.
+    pooled_model  = pooled_model,
     models        = models,
     features      = features,
     formula       = form,
+    pool_formula  = pool_form,
     regime_labels = regime_labels,
     train_years   = c(min(train$year), max(train$year)),
     n_train       = nrow(train),
-    model_version = "unrest-risk-v0.2-ridge",
+    model_version = "unrest-risk-v0.5-monotonic-constrained",
     n_bootstrap   = B_bootstrap,
     fitted_at     = Sys.time()
   ),

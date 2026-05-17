@@ -11,9 +11,22 @@ execute:
 ---
 
 Joins V-Dem, WDI, UNHCR, and FAO through the `countries` master table into a
-single country-year panel. One row per (iso3c, year). All numeric features
-are z-scored **within country** so the model learns "this country's shock
-relative to its own history."
+single country-year panel. One row per (iso3c, year).
+
+**v0.4 simplification:** features are **raw cross-country levels**, no
+within-country z-scoring. The model answers "given the structural and
+economic characteristics of this country, what's the world-historical
+unrest probability?" — the PITF/Goldstone framing.
+
+**v0.4.1 honesty principle:** model-input features are **not** region-median
+imputed. If a country (e.g., PRK, Cuba pre-2018, Somalia) has no real source
+data for a feature, the row stays NA and the country is dropped from
+training and from the inference snapshot. The dashboard surfaces this as
+"no prediction available" rather than inventing a regional baseline.
+
+Heavy-tailed features (`refugee_outflow`, `cpi_inflation`) get
+log-transformed or winsorized so the regression isn't dominated by
+Venezuela/Zimbabwe hyperinflation or Afghanistan/Syria refugee outflows.
 
 Output: `panel_features` table in `data/panel.duckdb`.
 
@@ -24,7 +37,7 @@ Output: `panel_features` table in `data/panel.duckdb`.
 library(DBI)
 library(duckdb)
 library(ggplot2)
-source("_helpers.R")
+source("_helpers.R")  # srs_palette / srs_theme — z_within() is gone in v0.4
 ```
 
 ## Open the panel db
@@ -74,6 +87,7 @@ raw <- dbGetQuery(con, "
     v.v2caautmob_ord     AS autoc_mobilization_ord,
     v.v2cademmob_ord     AS demoz_mobilization_ord,
     v.v2caviol_ord       AS political_violence_ord,
+    v.v2elaccept_ord     AS loser_consent,     -- 0..4, V-Dem election-losers consent (factionalism inverse)
     -- CPI priority chain: WDI -> hand-curated IMF -> bulk IMF WEO. Anything
     -- still NULL falls to region-median imputation in R below, and gets
     -- flagged via cpi_imputed.
@@ -85,10 +99,21 @@ raw <- dbGetQuery(con, "
            AND imf.cpi_inflation IS NULL
            AND weo.cpi_inflation IS NULL
          THEN 1 ELSE 0 END AS cpi_imputed,
-    w.gdp_growth,
-    w.gdp_per_cap,
+    -- GDP growth + GDP per capita: backfill WDI with IMF WEO. WDI runs
+    -- 12–18 months behind real time; WEO has IMF country-team estimates
+    -- for the current year and projections through year+6. For 2025/2026
+    -- forecasts this is the only way to score countries before WDI's
+    -- annual update lands. Marked here as a source-backfill (not synthetic
+    -- imputation): both WDI and WEO are real published data.
+    COALESCE(w.gdp_growth, weo_g.gdp_growth) AS gdp_growth,
+    COALESCE(w.gdp_per_cap, weo_pc.gdp_per_cap) AS gdp_per_cap,
     w.trade_pct_gdp,
-    w.unemployment,
+    -- Unemployment: WDI ILO modelled estimate by default, but for state-
+    -- managed economies (Cuba, Belarus, PRK, Venezuela, etc.) the official
+    -- rate doesn't reflect informal-sector / underemployment reality. We
+    -- override with hand-curated IMF Article IV / NGO estimates where they
+    -- exist; otherwise fall back to WDI.
+    COALESCE(un.unemployment_curated, w.unemployment) AS unemployment,
     (COALESCE(u.refugees, 0) + COALESCE(u.asylum_seekers, 0)) AS refugee_outflow,
     f.ffpi_avg,
     pb.effectivenumber   AS coup_proof_fragmentation,
@@ -97,12 +122,14 @@ raw <- dbGetQuery(con, "
     fh.hr_score          AS fariss_hr_score,
     pol.polity2          AS polity2
   FROM countries c
-  -- Cap at 2024: WDI data for most countries ends here. V-Dem v16 has
-  -- partial 2025 stub data with NAs in WDI/UNHCR/etc., which gets filled
-  -- by region-median imputation. The snapshot would then pick 2025 (mostly
-  -- imputed) over 2024 (mostly real). Filter to keep 2024 as the snapshot
-  -- year for now. Revisit when next year's data releases land.
-  JOIN vdem v       ON c.vdem_id    = v.country_id  AND v.year >= 1995 AND v.year <= 2024
+  -- v0.4.1: panel goes through 2025. WDI/V-Dem/UNHCR/PB all have 2025
+  -- data; UCDP currently ends 2024 so conflict_neighbors_count for 2025
+  -- will be NA for most countries, which means most 2025 rows fall back
+  -- to 2024 at inference time. That's the honest answer — we no longer
+  -- region-median fill phantom 2025 values. When UCDP 2025 lands (mid-2026
+  -- release cadence), more countries will get a real 2025 prediction
+  -- (which forecasts unrest in 2026).
+  JOIN vdem v       ON c.vdem_id    = v.country_id  AND v.year >= 1995 AND v.year <= 2025
   LEFT JOIN wdi w   ON c.iso3c      = w.iso3c       AND v.year = w.year
   LEFT JOIN unhcr u ON c.iso3c      = u.coo_iso     AND v.year = u.year
   LEFT JOIN fao_annual f         ON v.year  = f.year
@@ -110,46 +137,21 @@ raw <- dbGetQuery(con, "
   LEFT JOIN security_forces sf   ON c.iso3c = sf.iso3c AND v.year = sf.year
   LEFT JOIN fariss_hr fh         ON c.iso3c = fh.iso3c AND v.year = fh.year
   LEFT JOIN polity5 pol          ON c.iso3c = pol.iso3c AND v.year = pol.year
-  LEFT JOIN imf_inflation imf    ON c.iso3c = imf.iso3c AND v.year = imf.year
-  LEFT JOIN imf_weo weo          ON c.iso3c = weo.iso3c AND v.year = weo.year
+  LEFT JOIN imf_inflation imf      ON c.iso3c = imf.iso3c    AND v.year = imf.year
+  LEFT JOIN imf_weo weo            ON c.iso3c = weo.iso3c    AND v.year = weo.year
+  LEFT JOIN imf_weo_gdp_growth   weo_g  ON c.iso3c = weo_g.iso3c   AND v.year = weo_g.year
+  LEFT JOIN imf_weo_gdp_pc       weo_pc ON c.iso3c = weo_pc.iso3c  AND v.year = weo_pc.year
+  LEFT JOIN unemployment_curated un     ON c.iso3c = un.iso3c      AND v.year = un.year
   WHERE c.region IS NOT NULL
   ORDER BY c.iso3c, v.year
 ")
 
-# Forward-fill late-ending series with the country's last non-NA value:
-# de Bruin ends 2010, Fariss ends 2021, Polity5 ends 2018. Structural
-# variables change slowly so short carry-forward is defensible. For the two
-# features that now enter the v0.2 ridge fit (fariss_hr_score, polity2) we
-# cap carry-forward at +5 years and let downstream region-median imputation
-# fill anything past that — stale governance scores get the most wrong on
-# countries that just had a regime change (Myanmar 2021, Niger 2023, etc).
-locf_within <- function(x) {
-  for (i in seq_along(x)) if (is.na(x[i]) && i > 1) x[i] <- x[i - 1]
-  x
-}
-locf_within_capped <- function(x, max_carry = 5) {
-  last_real <- NA_real_
-  carry <- 0L
-  for (i in seq_along(x)) {
-    if (!is.na(x[i])) {
-      last_real <- x[i]
-      carry <- 0L
-    } else {
-      carry <- carry + 1L
-      if (!is.na(last_real) && carry <= max_carry) x[i] <- last_real
-    }
-  }
-  x
-}
-# de Bruin: still excluded from the fit, keep unconditional fill so it stays
-# usable for ad-hoc panel queries.
-for (col in c("counterbalancing", "politicization")) {
-  raw[[col]] <- ave(raw[[col]], raw$iso3c, FUN = locf_within)
-}
-# Fariss + Polity5: capped fill so 6+ year carries fall through to imputation.
-for (col in c("fariss_hr_score", "polity2")) {
-  raw[[col]] <- ave(raw[[col]], raw$iso3c, FUN = locf_within_capped)
-}
+# v0.4.1 honesty principle: NO forward-fill for any source. de Bruin
+# (ends 2010), Polity5 (ends 2018), and Fariss (ends 2021) leave their NAs
+# intact. These features are excluded from the v0.4 model fit anyway; in
+# panel queries / dashboard display they show as NA for post-source-end
+# years, which is the honest answer. Earlier versions had locf carry-forward
+# that created phantom "data" the model treated as real.
 cat("After forward-fill: non-NA rows per feature:\n")
 print(c(counterbalancing  = sum(!is.na(raw$counterbalancing)),
         fariss_hr_score   = sum(!is.na(raw$fariss_hr_score)),
@@ -161,80 +163,147 @@ cat("Year range:    ", range(raw$year), "\n")
 head(raw, 2)
 ```
 
-## Within-country z-scoring
+## v0.3 derived features
 
-For each numeric feature, subtract the country's own historical mean and
-divide by its own historical SD. This makes "Cuba's GDP shock in 2020"
-comparable to "Argentina's GDP shock in 2002" even though their absolute
-GDP-growth distributions are different. Skip countries with too-few obs.
+Three new "structural anchor" features grounded in the PITF (Goldstone 2010)
+and ViEWS methodology:
+
+- `log_gdp_per_cap` — development anchor. Rich countries are structurally
+  less unrest-prone; this is the second-strongest predictor in PITF after
+  regime type. Used as a level (not z-scored within country) so cross-country
+  variation in wealth survives.
+- `conflict_neighbors_count` — PITF's "conflict-ridden neighborhoods" feature.
+  Count of bordering / same-region countries with UCDP fatalities ≥100 this
+  year. Same-region approximation since we don't have a true borders table.
+- `loser_consent` — V-Dem `v2elaccept_ord` (0..4). Inverse of factional
+  politics: low values mean election losers don't accept results
+  (Bolsonaro 2022, Trump 2020-2023). PITF found this to be the most powerful
+  predictor among partial-democracy regimes.
 
 ```{r}
-#| label: z-score
-features <- c("civil_liberties", "freedom_expression", "regime_support_locus",
-              "political_violence_ord",
-              "cpi_inflation", "gdp_growth", "gdp_per_cap",
-              "trade_pct_gdp", "unemployment",
-              "refugee_outflow", "ffpi_avg",
-              "coup_proof_fragmentation", "counterbalancing", "politicization",
-              "fariss_hr_score", "polity2")
+#| label: v03-features
+# log_gdp_per_cap: log1p is safe when gdp_per_cap is 0 or NA.
+raw$log_gdp_per_cap <- log1p(pmax(raw$gdp_per_cap, 0))
 
-# z_within is defined in _helpers.R (sourced above). Same function used
-# downstream by 12_export_artifacts.qmd if needed, and the dashboard's
-# `effectiveZValue` JS function mirrors the formula + winsorize bound.
+# conflict_neighbors_count: for each (region, year), how many OTHER countries
+# in the same UN region had UCDP fatalities >= 100 that year?
+ucdp_annual_local <- dbGetQuery(con, "
+  SELECT iso3c, year, fatalities_best FROM ucdp_annual
+  WHERE fatalities_best >= 100
+")
+# Tag each UCDP row with its region by joining to countries
+ucdp_annual_local <- merge(
+  ucdp_annual_local,
+  unique(raw[, c("iso3c", "region")]),
+  by = "iso3c", all.x = TRUE
+)
+# Count conflict countries per (region, year). Use UCDP year as-is — we'll
+# join it as the LAG-1 feature so 2025 panel rows pick up 2024 UCDP data
+# (academically defensible — conflict spillover takes time to manifest, and
+# this also means 2025 features are forecastable today even though UCDP
+# only releases a year behind real time).
+region_conflict_counts <- aggregate(
+  iso3c ~ region + year,
+  data = ucdp_annual_local,
+  FUN = function(x) length(unique(x))
+)
+names(region_conflict_counts)[3] <- "n_in_region"
+# Lag: a row for panel year=t pulls UCDP from year=t-1
+region_conflict_counts$panel_year <- region_conflict_counts$year + 1L
+region_conflict_counts$year <- NULL
 
-# Region-median imputation: for each (year, region), fill missing values
-# with the median of available values in that (year, region). Falls back to
-# global-median if the (year, region) cell is entirely empty. This keeps
-# countries like Cuba (which doesn't report CPI to the World Bank) in the
-# panel by giving them a plausible regional baseline rather than dropping
-# them entirely. Done BEFORE z-scoring so within-country z's reflect a
-# consistent imputed time series.
+raw <- merge(raw, region_conflict_counts,
+             by.x = c("region", "year"),
+             by.y = c("region", "panel_year"),
+             all.x = TRUE)
+raw$n_in_region[is.na(raw$n_in_region)] <- 0
+# Subtract 1 if THIS country itself was in conflict last year (don't count self)
+this_country_conflict <- ucdp_annual_local[, c("iso3c", "year")]
+this_country_conflict$panel_year <- this_country_conflict$year + 1L
+this_country_conflict$year <- NULL
+this_country_conflict$self_in_conflict <- 1L
+raw <- merge(raw, this_country_conflict,
+             by.x = c("iso3c", "year"),
+             by.y = c("iso3c", "panel_year"), all.x = TRUE)
+raw$self_in_conflict[is.na(raw$self_in_conflict)] <- 0L
+raw$conflict_neighbors_count <- pmax(raw$n_in_region - raw$self_in_conflict, 0)
+raw$n_in_region <- NULL
+raw$self_in_conflict <- NULL
+
+# loser_consent already in raw via SQL join (v2elaccept_ord).
+
+cat("v0.3 anchor features:\n")
+print(summary(raw[, c("log_gdp_per_cap", "conflict_neighbors_count", "loser_consent")]))
+
+# Re-sort because the merges reorder rows.
+raw <- raw[order(raw$iso3c, raw$year), ]
+```
+
+## Heavy-tail transforms (no imputation for v0.4 fit features)
+
+**v0.4.1 honesty principle:** the v0.4 model-input features are **not**
+region-median imputed. If a country has no real source data for a feature,
+the row is NA and gets listwise-dropped from training; at inference, the
+dashboard reports "no prediction available" rather than scoring a country
+on synthetic regional medians. This is what protects PRK / Cuba-pre-2018 /
+Somalia / Eritrea from getting a fake prediction built on imputed data.
+
+We still region-median impute *ancillary* features (`fariss_hr_score`,
+`polity2`, `counterbalancing`, `freedom_expression`, etc.) for dashboard
+display purposes only — they aren't model inputs.
+
+Two heavy-tailed transforms for cross-country comparability:
+
+- `log_refugee_outflow = log1p(refugee_outflow)` — Afghanistan/Syria 6M
+  vs USA 6K. Log compresses the scale.
+- `cpi_inflation` is **clipped to [-10, 200]%** — hyperinflation outliers
+  (Venezuela 2017, Zimbabwe 2008) would otherwise swing the coefficient.
+
+```{r}
+#| label: transform
+# v0.4.1 honesty principle: NO imputation anywhere. Model-input features
+# stay NA where source data is missing; rows get listwise-dropped in fitting
+# and skipped at inference. Ancillary panel features also stay NA — earlier
+# versions region-median imputed them, which created phantom values that
+# could leak into dashboard displays or future regressions by accident.
 panel <- raw
-imputation_log <- data.frame(feature = character(), n_imputed = integer())
 
-for (feat in features) {
-  na_idx <- which(is.na(panel[[feat]]))
-  if (length(na_idx) == 0) next
+# Cross-country log/clip transforms for the heavy-tailed model inputs.
+# (Applied AFTER joining; NA stays NA through these transforms.)
+panel$log_refugee_outflow <- log1p(pmax(panel$refugee_outflow, 0))
+panel$cpi_inflation       <- pmin(pmax(panel$cpi_inflation, -10), 200)
 
-  # Try region-median per (year, region)
-  for (i in na_idx) {
-    yr <- panel$year[i]
-    rgn <- panel$region[i]
-    pool <- panel[[feat]][panel$year == yr & panel$region == rgn]
-    pool <- pool[!is.na(pool)]
-    if (length(pool) >= 3) {
-      panel[[feat]][i] <- median(pool)
-    }
-  }
+# v0.5: lag political_violence_ord by 1 year per country. Concurrent
+# political_violence_ord (V-Dem v2caviol_ord) at year T predicted our
+# year-T+1 outcome, which is partly DEFINED by V-Dem violence at year T+1
+# (the multi-source fusion uses v2cagenmob_ord >= 4 as a fallback). Lagging
+# breaks the autocorrelation: year-T-1 violence is in the past relative to
+# year-T+1 outcome, two-year gap, no overlap with the outcome label.
+panel <- panel[order(panel$iso3c, panel$year), ]
+panel$political_violence_ord_lag1 <- ave(panel$political_violence_ord, panel$iso3c,
+                                          FUN = function(x) c(NA, x[-length(x)]))
 
-  # Anything still NA: fall back to global median for that feature
-  still_na <- is.na(panel[[feat]])
-  if (any(still_na)) {
-    panel[[feat]][still_na] <- median(panel[[feat]], na.rm = TRUE)
-  }
+# v0.5 model-input feature set. political_violence_ord swapped for its
+# 1-year lag (kills autocorrelation with the outcome label).
+features <- c("civil_liberties", "log_gdp_per_cap", "loser_consent",
+              "conflict_neighbors_count",
+              "gdp_growth", "cpi_inflation", "unemployment",
+              "political_violence_ord_lag1",
+              "log_refugee_outflow", "coup_proof_fragmentation")
 
-  imputation_log <- rbind(imputation_log,
-                          data.frame(feature = feat, n_imputed = length(na_idx)))
-}
-cat("Region-median imputation log:\n")
-print(imputation_log)
+cat("v0.4 features (raw levels, ", length(features), " total):\n", sep = "")
+print(features)
 
-# Some features are heavily skewed (e.g. refugee_outflow: most countries
-# near zero, a few in the hundreds of thousands). Log-transform before
-# z-scoring so the z reflects meaningful variation across the whole range.
-log_features <- c("refugee_outflow")
-
-for (feat in features) {
-  z_col <- paste0("z_", feat)
-  x <- panel[[feat]]
-  if (feat %in% log_features) x <- log1p(pmax(x, 0))
-  panel[[z_col]] <- ave(x, panel$iso3c, FUN = z_within)
-}
-
-# Quick sanity: a country's z-scores should average ~0 across history.
-cuba <- subset(panel, iso3c == "CUB")
-cat("Cuba z-score means (should be ~0):\n")
-print(round(sapply(cuba[, paste0("z_", features)], mean, na.rm = TRUE), 3))
+# Per-feature NA count for 2024 — which countries get dropped at inference time?
+y2024 <- panel[panel$year == 2024, ]
+cat("\n2024 NA counts per model-input feature (n=", nrow(y2024),
+    " country rows):\n", sep = "")
+print(sapply(features, function(f) sum(is.na(y2024[[f]]))))
+cat("\nCountries with ANY NA on a v0.4 model feature in 2024:\n")
+y2024_na_any <- y2024[!complete.cases(y2024[, features]), c("iso3c", "name")]
+print(y2024_na_any)
+cat("\nv0.4 feature summary across all years (cross-country distribution):\n")
+print(summary(panel[, features]))
 ```
 
 ## Write the panel
@@ -263,19 +332,15 @@ dbGetQuery(con, "
 ")
 ```
 
-## Sanity plot: Cuba indicators 2015 onward
+## Sanity plot: Cuba raw indicators 2015 onward
 
 ```{r}
 #| label: cuba-plot
-#| fig-cap: "Cuba indicator z-scores, 2015 onward — built panel coherence check"
+#| fig-cap: "Cuba indicators (raw cross-country levels), 2015 onward"
 #| fig-width: 8
 #| fig-height: 5
 cuba_plot <- dbGetQuery(con, "
-  SELECT year,
-         z_civil_liberties   AS civil_liberties,
-         z_gdp_growth        AS gdp_growth,
-         z_refugee_outflow   AS refugee_outflow,
-         z_ffpi_avg          AS food_price
+  SELECT year, civil_liberties, gdp_growth, log_refugee_outflow, cpi_inflation
   FROM panel_features
   WHERE iso3c = 'CUB' AND year >= 2015
   ORDER BY year
@@ -283,22 +348,22 @@ cuba_plot <- dbGetQuery(con, "
 
 cuba_long <- stack(cuba_plot[, -1])
 cuba_long$year <- rep(cuba_plot$year, ncol(cuba_plot) - 1)
-names(cuba_long) <- c("z", "indicator", "year")
+names(cuba_long) <- c("value", "indicator", "year")
 
-ggplot(cuba_long, aes(x = year, y = z, color = indicator)) +
-  geom_hline(yintercept = 0, color = "#A89880", linewidth = 0.4) +
+ggplot(cuba_long, aes(x = year, y = value, color = indicator)) +
   geom_line(linewidth = 0.8) +
   geom_point(size = 2) +
+  facet_wrap(~ indicator, scales = "free_y") +
   scale_x_continuous(breaks = unique(cuba_long$year)) +
-  scale_color_manual(values = c(civil_liberties = srs_palette$accent,
-                                gdp_growth      = "#5C7A93",
-                                refugee_outflow = srs_palette$crisis,
-                                food_price      = "#8B6F2B")) +
-  labs(x = NULL, y = "z-score (within-country)",
-       caption = "Source: V-Dem + WDI + UNHCR + FAO via panel.duckdb",
+  scale_color_manual(values = c(civil_liberties     = srs_palette$accent,
+                                gdp_growth          = "#5C7A93",
+                                log_refugee_outflow = srs_palette$crisis,
+                                cpi_inflation       = "#8B6F2B")) +
+  labs(x = NULL, y = NULL,
+       caption = "Source: V-Dem + WDI + UNHCR via panel.duckdb",
        color = NULL) +
   srs_theme() +
-  ggplot2::theme(legend.position = "bottom")
+  ggplot2::theme(legend.position = "none")
 ```
 
 ## Cleanup

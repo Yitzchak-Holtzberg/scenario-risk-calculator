@@ -10,15 +10,18 @@ execute:
   message: false
 ---
 
-Writes four JSON files to `../artifacts/` that the SvelteKit dashboard
-consumes. Math runs in the browser — no backend at runtime.
+Writes JSON files to `../artifacts/` that the static dashboard consumes.
+Math runs in the browser — no backend at runtime.
 
-- **`weights.json`** — coefficients + vcov per regime stratum; feature list
+- **`weights.json`** — coefficients + vcov per regime stratum + pooled; feature list
 - **`base_rates.json`** — per-regime base rates from training data
-- **`country_snapshot.json`** — per-country: regime, latest raw values,
-  within-country mean+sd (for slider math), predicted probability + 90% CI,
-  and per-feature contribution
+- **`country_snapshot.json`** — per-country: regime, latest raw feature
+  values, predicted probability + 90% CI, per-feature contribution
 - **`calibration.json`** — Brier, log loss, reliability bins
+
+v0.4: features are raw cross-country levels (no z-scoring). Sliders in the
+dashboard bind directly to raw values. No `winsorize_bound`, no z↔raw
+conversion, no within-country mean/sd shipped to the client.
 
 ## Libraries
 
@@ -34,8 +37,9 @@ library(jsonlite)
 ```{r}
 #| label: load
 fit <- readRDS("../data/model/fit.rds")
-models   <- fit$models
-features <- fit$features
+models       <- fit$models
+pooled_model <- fit$pooled_model
+features     <- fit$features
 regime_labels <- fit$regime_labels
 calibration_obj <- readRDS("../data/model/calibration.rds")
 
@@ -55,7 +59,7 @@ predictions.
 strata <- list()
 for (k in names(models)) {
   fit_k <- models[[k]]
-  # Ridge fits (10_fit_model.qmd v0.2) store the cv.glmnet coefficients +
+  # Ridge fits store the cv.glmnet coefficients +
   # bootstrap-derived empirical covariance directly on the model list,
   # since glmnet has no closed-form vcov(). Dashboard's MVN sampling for
   # 90% CIs works the same way - sample from MVN(coef, vcov) and apply.
@@ -81,39 +85,41 @@ weights <- list(
   model_version = fit$model_version,
   fitted_at     = format(fit$fitted_at, "%Y-%m-%d"),
   train_years   = fit$train_years,
-  # Z-scores in country_snapshot were computed server-side using z_within
-  # (in training/_helpers.R) with this winsorize bound. The dashboard JS
-  # uses this constant to recompute z when sliders change, so server and
-  # client stay in sync via this single value.
-  winsorize_bound = 3,
   features      = features,
   feature_labels = as.list(c(
-    civil_liberties            = "Civil liberties",
-    fariss_hr_score            = "Human rights protection",
-    polity2                    = "Polity score",
-    z_gdp_growth               = "GDP growth",
-    z_cpi_inflation            = "Inflation",
-    z_unemployment             = "Unemployment",
-    z_political_violence_ord   = "Political violence",
-    z_refugee_outflow          = "Refugee outflow",
-    z_ffpi_avg                 = "Global food prices",
-    z_coup_proof_fragmentation = "Coup-proofing fragmentation",
-    cpi_imputed                = "Inflation imputed (flag)"
+    civil_liberties          = "Civil liberties",
+    log_gdp_per_cap          = "GDP per capita",
+    loser_consent            = "Loser consent",
+    conflict_neighbors_count = "Regional conflict",
+    gdp_growth               = "GDP growth",
+    cpi_inflation            = "Inflation",
+    unemployment             = "Unemployment",
+    political_violence_ord   = "Political violence",
+    log_refugee_outflow      = "Refugee outflow (log)",
+    coup_proof_fragmentation = "Coup-proofing fragmentation"
   )),
   feature_direction = as.list(c(   # +1 = higher value raises risk, -1 = lowers
-    civil_liberties            = -1,
-    fariss_hr_score            = -1,
-    polity2                    = -1,
-    z_gdp_growth               = -1,
-    z_cpi_inflation            = +1,
-    z_unemployment             = +1,
-    z_political_violence_ord   = +1,
-    z_refugee_outflow          = +1,
-    z_ffpi_avg                 = +1,
-    z_coup_proof_fragmentation = -1,
-    cpi_imputed                = 0   # flag - direction depends on fit
+    civil_liberties          = -1,
+    log_gdp_per_cap          = -1,
+    loser_consent            = -1,
+    conflict_neighbors_count = +1,
+    gdp_growth               = -1,
+    cpi_inflation            = +1,
+    unemployment             = +1,
+    political_violence_ord   = +1,
+    log_refugee_outflow      = +1,
+    coup_proof_fragmentation = -1
   )),
-  strata = strata
+  strata = strata,
+  pooled = list(
+    coefficients  = as.list(pooled_model$coefficients),
+    vcov          = unname(as.matrix(pooled_model$vcov)),
+    feature_order = pooled_model$feature_order,
+    lambda        = pooled_model$lambda,
+    n_train       = pooled_model$n_train,
+    n_events      = pooled_model$n_events,
+    n_bootstrap   = pooled_model$n_bootstrap
+  )
 )
 
 dir.create("../artifacts", showWarnings = FALSE, recursive = TRUE)
@@ -151,55 +157,24 @@ cat("Wrote artifacts/base_rates.json\n")
 
 ## Build country_snapshot.json
 
-For each country, take its **latest** year (2023 in v0). Pull raw values
-and within-country mean/sd so the dashboard can recompute z-scores when
-the user moves a slider. Then score with the regime's model and bootstrap
-a 90% CI by sampling 1,000 times from `MVN(coef, vcov)`.
+For each country, take its **latest** year (typically 2024). Pull raw
+feature values, score with the pooled cross-sectional model, and bootstrap a
+90% CI by sampling 1,000 times from `MVN(coef, vcov)`.
+
+v0.4 simplification: features are raw cross-country levels, so the snapshot
+ships just `{value, contribution}` per feature — no `z`, `mean`, or `sd`
+fields. Sliders in the dashboard bind directly to raw values.
 
 ```{r}
 #| label: snapshot
-# Map z-scored features back to their raw counterparts so the dashboard can
-# work with intelligible values (e.g. show "GDP growth = -10.95%", not "z = -2.3").
-raw_features <- c(
-  civil_liberties            = "civil_liberties",
-  fariss_hr_score            = "fariss_hr_score",
-  polity2                    = "polity2",
-  z_gdp_growth               = "gdp_growth",
-  z_cpi_inflation            = "cpi_inflation",
-  z_unemployment             = "unemployment",
-  z_political_violence_ord   = "political_violence_ord",
-  z_refugee_outflow          = "refugee_outflow",
-  z_ffpi_avg                 = "ffpi_avg",
-  z_coup_proof_fragmentation = "coup_proof_fragmentation",
-  cpi_imputed                = "cpi_imputed"
-)
-
-# Compute within-country mean and sd for each raw feature, across all history.
-country_stats <- list()
-for (iso in unique(panel$iso3c)) {
-  rows <- panel[panel$iso3c == iso, ]
-  stats <- list()
-  for (z_name in names(raw_features)) {
-    raw_name <- raw_features[[z_name]]
-    x <- rows[[raw_name]]
-    if (sum(!is.na(x)) < 5) next
-    stats[[raw_name]] <- list(
-      country_mean = mean(x, na.rm = TRUE),
-      country_sd   = sd(x, na.rm = TRUE)
-    )
-  }
-  country_stats[[iso]] <- stats
-}
-
 # Sampling helper: draw from MVN given coef + (bootstrap-empirical) cov,
-# score linearly + sigmoid. Reads off the persisted ridge model list — no
-# coef()/vcov() generic dispatch since cv.glmnet has no closed-form vcov.
+# score linearly + sigmoid. cv.glmnet has no closed-form vcov, so we use the
+# persisted bootstrap covariance directly.
 mvn_sample_ci <- function(stratum_model, x_named, n_draw = 1000, alpha = 0.10) {
   co <- stratum_model$coefficients
   vc <- stratum_model$vcov
-  L  <- chol(vc + diag(1e-8, nrow(vc)))  # tiny ridge for numerical safety
+  L  <- chol(vc + diag(1e-8, nrow(vc)))
   draws <- t(L) %*% matrix(rnorm(length(co) * n_draw), nrow = length(co)) + co
-  # design vector with intercept first
   x_full <- c(1, x_named[names(co)[-1]])
   lp <- as.numeric(t(draws) %*% x_full)
   p  <- 1 / (1 + exp(-lp))
@@ -215,7 +190,6 @@ snapshot_rows <- list()
 for (iso in unique(panel$iso3c)) {
   rows <- panel[panel$iso3c == iso & panel$year <= latest_year, ]
   if (nrow(rows) == 0) next
-  # Latest non-NA-features row for this country.
   rows <- rows[order(-rows$year), ]
   good <- rows[complete.cases(rows[, c("regime_type", features)]), ]
   if (nrow(good) == 0) next
@@ -224,30 +198,48 @@ for (iso in unique(panel$iso3c)) {
   if (!k %in% names(models)) next
 
   x_named <- setNames(as.numeric(cur[, features]), features)
+
+  # PRIMARY: pooled cross-sectional model.
+  pool_coef <- pooled_model$coefficients
+  pool_vec  <- setNames(rep(0, length(pool_coef)), names(pool_coef))
+  pool_vec["(Intercept)"] <- 1
+  for (f in features) if (f %in% names(pool_vec)) pool_vec[f] <- x_named[[f]]
+  pool_lp  <- sum(pool_coef * pool_vec)
+  pool_pred <- 1 / (1 + exp(-pool_lp))
+  L_pool <- chol(pooled_model$vcov + diag(1e-8, nrow(pooled_model$vcov)))
+  draws_pool <- t(L_pool) %*% matrix(rnorm(length(pool_coef) * 1000),
+                                     nrow = length(pool_coef)) + pool_coef
+  pool_lp_draws <- as.numeric(t(draws_pool) %*% pool_vec)
+  pool_p_draws  <- 1 / (1 + exp(-pool_lp_draws))
+  pool_ci_lo <- unname(quantile(pool_p_draws, 0.05))
+  pool_ci_hi <- unname(quantile(pool_p_draws, 0.95))
+
+  # SECONDARY: stratified per-regime model (analyst context only).
   pred <- mvn_sample_ci(models[[k]], x_named)
 
-  # Contribution = coef * z for each feature (linear-predictor units)
-  co <- models[[k]]$coefficients
-  contribs <- co[features] * x_named[features]
+  # Per-feature contribution = coef * value (logit units, pooled coefs).
+  # sapply over a named character vector loses outer names when the inner
+  # value is named (pool_coef[f] is a named scalar) — set names explicitly.
+  contribs <- sapply(features, function(f) {
+    if (f %in% names(pool_coef)) unname(pool_coef[f] * x_named[[f]]) else 0
+  })
+  names(contribs) <- features
 
-  # Raw values for sliders. Skip features that have no entry in raw_features
-  # (e.g. cpi_imputed is a binary indicator — used by the model but not
-  # surfaced as a slider in the dashboard).
+  # v0.4: ship just {value, contribution} per feature. No z, mean, sd.
   raw_vals <- list()
-  stats <- country_stats[[iso]]
-  for (z_name in features) {
-    # raw_features is a named char vector; `[[missing_name]]` errors, so
-    # check membership first. cpi_imputed has no slider mapping by design.
-    if (!z_name %in% names(raw_features)) next
-    raw_name <- unname(raw_features[z_name])
-    raw_vals[[raw_name]] <- list(
-      value = unname(cur[[raw_name]]),
-      z     = unname(x_named[[z_name]]),
-      mean  = if (!is.null(stats[[raw_name]])) unname(stats[[raw_name]]$country_mean) else NA,
-      sd    = if (!is.null(stats[[raw_name]])) unname(stats[[raw_name]]$country_sd) else NA,
-      contribution = unname(contribs[[z_name]])
+  for (f in features) {
+    raw_vals[[f]] <- list(
+      value        = unname(cur[[f]]),
+      contribution = unname(contribs[[f]])
     )
   }
+
+  # Data-quality flag: 1 when the snapshot-year CPI was region-median
+  # imputed because no real source (WDI / IMF curated / IMF WEO) had a
+  # value for this country-year. The dashboard surfaces this as a "low
+  # data quality" badge — the prediction is still produced, but the user
+  # should down-weight it for affected countries (PRK / pre-2018 CUB / etc.).
+  is_imputed <- isTRUE(as.logical(cur$cpi_imputed))
 
   snapshot_rows[[iso]] <- list(
     iso3c        = iso,
@@ -257,9 +249,16 @@ for (iso in unique(panel$iso3c)) {
     regime_type  = as.integer(cur$regime_type),
     regime_label = regime_labels[[k]],
     snapshot_year = as.integer(cur$year),
-    predicted_probability = unname(pred["point"]),
-    ci_lo_90  = unname(pred["lo"]),
-    ci_hi_90  = unname(pred["hi"]),
+    # PRIMARY: pooled-model probability + 90% CI. Cross-country comparable.
+    predicted_probability = unname(pool_pred),
+    ci_lo_90              = unname(pool_ci_lo),
+    ci_hi_90              = unname(pool_ci_hi),
+    # SECONDARY: stratified prediction = "within-regime stress" signal.
+    # Dashboard surfaces this as analyst context only.
+    stratified_probability     = unname(pred["point"]),
+    stratified_ci_lo_90        = unname(pred["lo"]),
+    stratified_ci_hi_90        = unname(pred["hi"]),
+    cpi_imputed = is_imputed,
     features  = raw_vals
   )
 }
@@ -323,6 +322,20 @@ write_json(list(
   reliability   = calibration_obj$reliability
 ), "../artifacts/calibration.json", auto_unbox = TRUE, pretty = TRUE)
 cat("Wrote artifacts/calibration.json\n")
+```
+
+## Sync dashboard artifact copy
+
+The dashboard fetches from `web/artifacts/` so it can run as a static site
+with no parent-directory access. Keep that served copy in lockstep with the
+canonical `artifacts/` directory every time artifacts are exported.
+
+```{r}
+#| label: sync-web-artifacts
+dir.create("../web/artifacts", showWarnings = FALSE, recursive = TRUE)
+json_files <- list.files("../artifacts", pattern = "\\.json$", full.names = TRUE)
+file.copy(json_files, "../web/artifacts", overwrite = TRUE)
+cat("Synced", length(json_files), "JSON artifacts to web/artifacts\n")
 ```
 
 ## Summary

@@ -53,26 +53,43 @@ cat("Holdout rows:", nrow(holdout),
 
 ## Score the holdout
 
-Each row uses the ridge model for its regime stratum. `glmnet`'s `predict()`
-wants the design matrix as `newx` (not a `newdata` data.frame), so build it
-with the same formula the fit used.
+**Primary** prediction comes from the pooled ridge (the absolute-likelihood
+scorer the dashboard headlines). We also compute the stratified per-regime
+prediction for secondary calibration metrics.
 
 ```{r}
 #| label: score
-holdout$pred <- NA_real_
+pool_form    <- fit$pool_formula
+pooled_model <- fit$pooled_model
+
+# Pooled prediction: single design matrix for all rows.
+mm_pool_h  <- model.matrix(pool_form, holdout)
+x_pool_h   <- mm_pool_h[, -1, drop = FALSE]
+holdout$pred_pooled <- as.numeric(predict(pooled_model$fit_cv,
+                                          newx = x_pool_h,
+                                          s    = "lambda.min",
+                                          type = "response"))
+
+# Stratified prediction: one stratum-specific design matrix per regime.
+holdout$pred_strat <- NA_real_
 for (k in names(models)) {
   idx <- holdout$regime_type == as.integer(k)
   if (any(idx)) {
     mm_h <- model.matrix(form, holdout[idx, ])
     x_h  <- mm_h[, -1, drop = FALSE]
-    holdout$pred[idx] <- as.numeric(predict(models[[k]]$fit_cv,
-                                            newx = x_h,
-                                            s    = "lambda.min",
-                                            type = "response"))
+    holdout$pred_strat[idx] <- as.numeric(predict(models[[k]]$fit_cv,
+                                                  newx = x_h,
+                                                  s    = "lambda.min",
+                                                  type = "response"))
   }
 }
+
+# Headline prediction = pooled. (Dashboard uses this.)
+holdout$pred <- holdout$pred_pooled
 holdout <- holdout[!is.na(holdout$pred), ]
 cat("Scored rows:", nrow(holdout), "\n")
+cat("Pooled mean pred:    ", round(mean(holdout$pred_pooled, na.rm = TRUE), 3), "\n")
+cat("Stratified mean pred:", round(mean(holdout$pred_strat,  na.rm = TRUE), 3), "\n")
 ```
 
 ## Brier and log loss

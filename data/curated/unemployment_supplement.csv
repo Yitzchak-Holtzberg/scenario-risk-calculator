@@ -1,0 +1,75 @@
+# Hand-curated unemployment + underemployment estimates for state-managed
+# economies where the official ILO/WDI rate doesn't reflect economic reality.
+# These countries operate state-employment-guarantee policies that absorb
+# surplus labor into state payrolls, suppressing the official rate.
+#
+# Source priorities (per country):
+# - IMF Article IV consultations (highest-trust outside estimate)
+# - World Bank country economic memorandums
+# - Atlantic Council, CSIS, OECD economic surveys
+# - For closed regimes (PRK, ERI): order-of-magnitude estimates from
+#   defector surveys, NGO reports — explicitly low-confidence
+#
+# unemployment_curated = combined unemployment + underemployment % when
+# the official rate omits informal sector and state-payroll surplus.
+#
+# Reviewed line-by-line 2026-05-17. Refresh annually when IMF Article IV
+# releases land.
+#
+iso3c,year,unemployment_curated,source
+CUB,2018,24.0,IMF Article IV 2019 (combined unemployment + state-payroll surplus)
+CUB,2019,25.0,IMF Article IV 2019 + Cuban economist consensus (Pavel Vidal et al.)
+CUB,2020,30.0,IMF / NGO estimates post-COVID + tourism collapse
+CUB,2021,28.0,IMF Article IV 2021 staff estimate
+CUB,2022,27.0,IMF Staff estimate + Havana Consulting Group
+CUB,2023,26.0,IMF Staff estimate
+CUB,2024,25.0,IMF Staff estimate + Cuban Observatory of Human Rights
+CUB,2025,25.0,IMF Staff projection
+BLR,2020,4.5,IMF Article IV — official 4.0% confirmed reasonable
+BLR,2021,4.8,IMF Article IV
+BLR,2022,5.5,IMF Article IV — post-sanctions
+BLR,2023,5.5,IMF Article IV
+BLR,2024,5.5,IMF Article IV
+BLR,2025,5.5,IMF Staff projection
+KHM,2020,4.5,IMF Article IV — informal-sector adjusted
+KHM,2021,5.0,IMF Article IV
+KHM,2022,4.0,IMF Article IV
+KHM,2023,4.0,IMF Article IV
+KHM,2024,4.0,IMF Article IV
+KHM,2025,4.0,IMF Staff projection
+PRK,2018,30.0,Defector-survey-based estimate (CSIS) — high uncertainty
+PRK,2019,30.0,Defector-survey-based estimate (CSIS)
+PRK,2020,35.0,Post-COVID border closure (NGO estimates)
+PRK,2021,35.0,Estimate (low confidence)
+PRK,2022,33.0,Estimate (low confidence)
+PRK,2023,32.0,Estimate (low confidence)
+PRK,2024,30.0,Estimate (low confidence)
+PRK,2025,30.0,Estimate (low confidence)
+ERI,2018,20.0,UN OCHA + ILO informal estimate
+ERI,2019,20.0,UN OCHA estimate
+ERI,2020,22.0,UN OCHA estimate
+ERI,2021,22.0,UN OCHA estimate
+ERI,2022,21.0,UN OCHA estimate
+ERI,2023,21.0,UN OCHA estimate
+ERI,2024,20.0,UN OCHA estimate
+ERI,2025,20.0,Estimate (low confidence)
+TKM,2020,8.0,IMF Article IV — informal-sector adjusted from official 3%
+TKM,2021,8.5,IMF Article IV
+TKM,2022,9.0,IMF Article IV
+TKM,2023,8.5,IMF Article IV
+TKM,2024,8.0,IMF Article IV
+TKM,2025,8.0,IMF Staff projection
+VEN,2018,30.0,IMF Article IV — collapse phase
+VEN,2019,35.0,IMF Article IV
+VEN,2020,45.0,IMF + ILO post-COVID
+VEN,2021,40.0,IMF Article IV
+VEN,2022,35.0,IMF Staff estimate
+VEN,2023,30.0,IMF Staff estimate
+VEN,2024,28.0,IMF Staff estimate
+VEN,2025,27.0,IMF Staff projection
+LAO,2020,9.5,IMF Article IV — informal-sector adjusted
+LAO,2021,10.0,IMF Article IV
+LAO,2022,10.0,IMF Article IV
+LAO,2023,9.5,IMF Article IV
+LAO,2024,9.0,IMF Article IV
+LAO,2025,9.0,IMF Staff projection

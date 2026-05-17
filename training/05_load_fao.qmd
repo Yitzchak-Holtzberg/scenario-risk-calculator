@@ -58,9 +58,22 @@ fao_raw <- read.csv(fao_local, skip = 2, header = TRUE,
                     na.strings = "", check.names = FALSE,
                     stringsAsFactors = FALSE)
 
+# Loud-fail if FAO inserts/removes a leading row and `skip = 2` lands on the
+# wrong header line. Without this, the column-name access below would error
+# with an opaque "undefined columns selected" instead of the real cause.
+expected_fao_cols <- c("Date", "Food Price Index", "Meat", "Dairy",
+                       "Cereals", "Oils", "Sugar")
+missing_fao_cols <- setdiff(expected_fao_cols, names(fao_raw))
+if (length(missing_fao_cols) > 0) {
+  stop(sprintf(
+    "FAO CSV layout drift: expected columns %s missing. Header row read was: %s. Adjust `skip` or the expected column list.",
+    paste(missing_fao_cols, collapse = ", "),
+    paste(head(names(fao_raw), 10), collapse = ", ")
+  ))
+}
+
 # Drop the 50+ trailing empty padding columns; keep the seven real ones.
-fao <- fao_raw[, c("Date", "Food Price Index", "Meat", "Dairy",
-                   "Cereals", "Oils", "Sugar")]
+fao <- fao_raw[, expected_fao_cols]
 names(fao) <- c("date", "ffpi", "meat", "dairy", "cereals", "oils", "sugar")
 fao <- fao[!is.na(fao$date) & fao$date != "", ]
 
