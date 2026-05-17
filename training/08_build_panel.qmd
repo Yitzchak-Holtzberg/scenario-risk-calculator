@@ -74,7 +74,17 @@ raw <- dbGetQuery(con, "
     v.v2caautmob_ord     AS autoc_mobilization_ord,
     v.v2cademmob_ord     AS demoz_mobilization_ord,
     v.v2caviol_ord       AS political_violence_ord,
-    COALESCE(w.cpi_inflation, imf.cpi_inflation) AS cpi_inflation,
+    -- CPI priority chain: WDI -> hand-curated IMF -> bulk IMF WEO. Anything
+    -- still NULL falls to region-median imputation in R below, and gets
+    -- flagged via cpi_imputed.
+    COALESCE(w.cpi_inflation, imf.cpi_inflation, weo.cpi_inflation) AS cpi_inflation,
+    -- Tier-3 indicator: 1 when no real CPI source exists (will be region-median
+    -- imputed below). Lets the model learn that 'imputed-CPI countries' are a
+    -- distinct subpopulation rather than treating the synthetic value as signal.
+    CASE WHEN w.cpi_inflation IS NULL
+           AND imf.cpi_inflation IS NULL
+           AND weo.cpi_inflation IS NULL
+         THEN 1 ELSE 0 END AS cpi_imputed,
     w.gdp_growth,
     w.gdp_per_cap,
     w.trade_pct_gdp,
@@ -101,20 +111,44 @@ raw <- dbGetQuery(con, "
   LEFT JOIN fariss_hr fh         ON c.iso3c = fh.iso3c AND v.year = fh.year
   LEFT JOIN polity5 pol          ON c.iso3c = pol.iso3c AND v.year = pol.year
   LEFT JOIN imf_inflation imf    ON c.iso3c = imf.iso3c AND v.year = imf.year
+  LEFT JOIN imf_weo weo          ON c.iso3c = weo.iso3c AND v.year = weo.year
   WHERE c.region IS NOT NULL
   ORDER BY c.iso3c, v.year
 ")
 
 # Forward-fill late-ending series with the country's last non-NA value:
 # de Bruin ends 2010, Fariss ends 2021, Polity5 ends 2018. Structural
-# variables change slowly so carry-forward is defensible for v0.
+# variables change slowly so short carry-forward is defensible. For the two
+# features that now enter the v0.2 ridge fit (fariss_hr_score, polity2) we
+# cap carry-forward at +5 years and let downstream region-median imputation
+# fill anything past that — stale governance scores get the most wrong on
+# countries that just had a regime change (Myanmar 2021, Niger 2023, etc).
 locf_within <- function(x) {
   for (i in seq_along(x)) if (is.na(x[i]) && i > 1) x[i] <- x[i - 1]
   x
 }
-for (col in c("counterbalancing", "politicization",
-              "fariss_hr_score", "polity2")) {
+locf_within_capped <- function(x, max_carry = 5) {
+  last_real <- NA_real_
+  carry <- 0L
+  for (i in seq_along(x)) {
+    if (!is.na(x[i])) {
+      last_real <- x[i]
+      carry <- 0L
+    } else {
+      carry <- carry + 1L
+      if (!is.na(last_real) && carry <= max_carry) x[i] <- last_real
+    }
+  }
+  x
+}
+# de Bruin: still excluded from the fit, keep unconditional fill so it stays
+# usable for ad-hoc panel queries.
+for (col in c("counterbalancing", "politicization")) {
   raw[[col]] <- ave(raw[[col]], raw$iso3c, FUN = locf_within)
+}
+# Fariss + Polity5: capped fill so 6+ year carries fall through to imputation.
+for (col in c("fariss_hr_score", "polity2")) {
+  raw[[col]] <- ave(raw[[col]], raw$iso3c, FUN = locf_within_capped)
 }
 cat("After forward-fill: non-NA rows per feature:\n")
 print(c(counterbalancing  = sum(!is.na(raw$counterbalancing)),

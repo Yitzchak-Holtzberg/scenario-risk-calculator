@@ -55,16 +55,21 @@ predictions.
 strata <- list()
 for (k in names(models)) {
   fit_k <- models[[k]]
-  co <- coef(fit_k)
-  vc <- vcov(fit_k)
+  # Ridge fits (10_fit_model.qmd v0.2) store the cv.glmnet coefficients +
+  # bootstrap-derived empirical covariance directly on the model list,
+  # since glmnet has no closed-form vcov(). Dashboard's MVN sampling for
+  # 90% CIs works the same way - sample from MVN(coef, vcov) and apply.
+  co <- fit_k$coefficients
+  vc <- fit_k$vcov
   strata[[regime_labels[[k]]]] <- list(
     regime_code   = as.integer(k),
     coefficients  = as.list(co),
     vcov          = unname(as.matrix(vc)),
-    feature_order = names(co),
-    n_train       = length(fit_k$y),
-    deviance      = unname(fit_k$deviance),
-    null_deviance = unname(fit_k$null.deviance)
+    feature_order = fit_k$feature_order,
+    n_train       = fit_k$n_train,
+    n_events      = fit_k$n_events,
+    lambda        = fit_k$lambda,
+    n_bootstrap   = fit_k$n_bootstrap
   )
 }
 
@@ -73,7 +78,7 @@ for (k in names(models)) {
 # their names, which breaks the dashboard's `weights.feature_labels[z_name]`
 # lookups (they'd return undefined).
 weights <- list(
-  model_version = "unrest-risk-v0.1",
+  model_version = fit$model_version,
   fitted_at     = format(fit$fitted_at, "%Y-%m-%d"),
   train_years   = fit$train_years,
   # Z-scores in country_snapshot were computed server-side using z_within
@@ -84,23 +89,29 @@ weights <- list(
   features      = features,
   feature_labels = as.list(c(
     civil_liberties            = "Civil liberties",
+    fariss_hr_score            = "Human rights protection",
+    polity2                    = "Polity score",
     z_gdp_growth               = "GDP growth",
     z_cpi_inflation            = "Inflation",
     z_unemployment             = "Unemployment",
     z_political_violence_ord   = "Political violence",
     z_refugee_outflow          = "Refugee outflow",
     z_ffpi_avg                 = "Global food prices",
-    z_coup_proof_fragmentation = "Coup-proofing fragmentation"
+    z_coup_proof_fragmentation = "Coup-proofing fragmentation",
+    cpi_imputed                = "Inflation imputed (flag)"
   )),
   feature_direction = as.list(c(   # +1 = higher value raises risk, -1 = lowers
     civil_liberties            = -1,
+    fariss_hr_score            = -1,
+    polity2                    = -1,
     z_gdp_growth               = -1,
     z_cpi_inflation            = +1,
     z_unemployment             = +1,
     z_political_violence_ord   = +1,
     z_refugee_outflow          = +1,
     z_ffpi_avg                 = +1,
-    z_coup_proof_fragmentation = -1
+    z_coup_proof_fragmentation = -1,
+    cpi_imputed                = 0   # flag - direction depends on fit
   )),
   strata = strata
 )
@@ -131,7 +142,7 @@ for (k in 0:3) {
 }
 
 write_json(list(
-  model_version = "unrest-risk-v0.1",
+  model_version = fit$model_version,
   train_years   = fit$train_years,
   regimes       = base_rates
 ), "../artifacts/base_rates.json", auto_unbox = TRUE, pretty = TRUE)
@@ -151,13 +162,16 @@ a 90% CI by sampling 1,000 times from `MVN(coef, vcov)`.
 # work with intelligible values (e.g. show "GDP growth = -10.95%", not "z = -2.3").
 raw_features <- c(
   civil_liberties            = "civil_liberties",
+  fariss_hr_score            = "fariss_hr_score",
+  polity2                    = "polity2",
   z_gdp_growth               = "gdp_growth",
   z_cpi_inflation            = "cpi_inflation",
   z_unemployment             = "unemployment",
   z_political_violence_ord   = "political_violence_ord",
   z_refugee_outflow          = "refugee_outflow",
   z_ffpi_avg                 = "ffpi_avg",
-  z_coup_proof_fragmentation = "coup_proof_fragmentation"
+  z_coup_proof_fragmentation = "coup_proof_fragmentation",
+  cpi_imputed                = "cpi_imputed"
 )
 
 # Compute within-country mean and sd for each raw feature, across all history.
@@ -177,9 +191,12 @@ for (iso in unique(panel$iso3c)) {
   country_stats[[iso]] <- stats
 }
 
-# Sampling helper: draw from MVN given coef + vcov, score linearly + sigmoid.
-mvn_sample_ci <- function(model, x_named, n_draw = 1000, alpha = 0.10) {
-  co <- coef(model); vc <- vcov(model)
+# Sampling helper: draw from MVN given coef + (bootstrap-empirical) cov,
+# score linearly + sigmoid. Reads off the persisted ridge model list — no
+# coef()/vcov() generic dispatch since cv.glmnet has no closed-form vcov.
+mvn_sample_ci <- function(stratum_model, x_named, n_draw = 1000, alpha = 0.10) {
+  co <- stratum_model$coefficients
+  vc <- stratum_model$vcov
   L  <- chol(vc + diag(1e-8, nrow(vc)))  # tiny ridge for numerical safety
   draws <- t(L) %*% matrix(rnorm(length(co) * n_draw), nrow = length(co)) + co
   # design vector with intercept first
@@ -210,14 +227,19 @@ for (iso in unique(panel$iso3c)) {
   pred <- mvn_sample_ci(models[[k]], x_named)
 
   # Contribution = coef * z for each feature (linear-predictor units)
-  co <- coef(models[[k]])
+  co <- models[[k]]$coefficients
   contribs <- co[features] * x_named[features]
 
-  # Raw values for sliders
+  # Raw values for sliders. Skip features that have no entry in raw_features
+  # (e.g. cpi_imputed is a binary indicator — used by the model but not
+  # surfaced as a slider in the dashboard).
   raw_vals <- list()
   stats <- country_stats[[iso]]
   for (z_name in features) {
-    raw_name <- raw_features[[z_name]]
+    # raw_features is a named char vector; `[[missing_name]]` errors, so
+    # check membership first. cpi_imputed has no slider mapping by design.
+    if (!z_name %in% names(raw_features)) next
+    raw_name <- unname(raw_features[z_name])
     raw_vals[[raw_name]] <- list(
       value = unname(cur[[raw_name]]),
       z     = unname(x_named[[z_name]]),
@@ -245,7 +267,7 @@ for (iso in unique(panel$iso3c)) {
 cat("Scored", length(snapshot_rows), "countries for snapshot\n")
 
 write_json(list(
-  model_version = "unrest-risk-v0.1",
+  model_version = fit$model_version,
   snapshot_year = latest_year,
   horizon_months = 12,
   countries     = snapshot_rows
@@ -290,7 +312,7 @@ cat("Wrote artifacts/hanke_inflation.json — countries:", length(hanke_latest),
 ```{r}
 #| label: calibration
 write_json(list(
-  model_version = "unrest-risk-v0.1",
+  model_version = fit$model_version,
   holdout_year  = calibration_obj$holdout_year,
   n_holdout     = calibration_obj$n_holdout,
   brier         = calibration_obj$brier,

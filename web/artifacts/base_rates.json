@@ -1,5 +1,5 @@
 {
-  "model_version": "unrest-risk-v0.1",
+  "model_version": "unrest-risk-v0.2-ridge",
   "train_years": [1995, 2022],
   "regimes": {
     "closed_autocracy": {

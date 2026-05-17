@@ -1,5 +1,5 @@
 ---
-title: "10 — Fit the regime-stratified logistic regression"
+title: "10 — Fit the regime-stratified ridge logistic regression"
 format:
   html:
     toc: true
@@ -10,43 +10,52 @@ execute:
   message: false
 ---
 
-Four separate logistic regressions — one per V-Dem RoW regime category —
-predicting `unrest_next_year` from six z-scored covariates. Coefficients and
-the variance-covariance matrix are saved so the dashboard can reproduce
-predictions *and* compute 90% CIs by sampling from `MVN(coef, vcov)`.
+Four separate ridge logistic regressions (one per V-Dem RoW regime category)
+predicting `unrest_next_year`. Lambda chosen per stratum via `cv.glmnet`.
+Coefficients persist with a **bootstrap-derived empirical covariance** in
+place of `vcov()` (penalized estimators don't have a closed-form sampling
+distribution); the dashboard still samples 90% CIs from `MVN(coef, cov)`,
+just from the empirical cov.
 
-**Features (6):**
+**Features (11):**
 
 *Absolute-level* — "where this country sits structurally":
 - `civil_liberties` — V-Dem 0–1 index
+- `fariss_hr_score` — Fariss latent human-rights protection (added v0.2)
+- `polity2` — Polity5 democracy–autocracy score (added v0.2)
 
 *Within-country z* — "how stressed vs the country's own history":
 - `z_gdp_growth` — economic shock
+- `z_cpi_inflation` — inflation shock (CPI sourced via WDI → IMF-curated → IMF WEO chain in `08_build_panel.qmd`; region-median imputed only for ~5% of training rows, flagged below)
+- `z_unemployment` — labor-market shock
 - `z_refugee_outflow` — population-leaving shock (log1p before z)
 - `z_political_violence_ord` — recent violence vs own norm
 - `z_ffpi_avg` — global food-price pressure
 - `z_coup_proof_fragmentation` — Pilster-Böhmelt effective-number of forces
 
-**Why not more features?** Tried adding `z_cpi_inflation`, `z_unemployment`,
-`z_regime_support_locus`. Brier skill dropped 0.062 → 0.025 because countries
-with data gaps (e.g. Cuba doesn't report CPI to the World Bank) got
-median-imputed synthetic values that introduced noise rather than signal.
-Proper fix is country/region-specific imputation, deferred to v1.
+*Imputation indicator* — added v0.3 after we found the listwise filter below
+was a silent no-op (every NA had been region-median imputed upstream, so
+countries with no real CPI source — PRK/SOM pre-2013/parts of ERI/TKM —
+were entering training with synthetic neighborhood values masquerading as
+signal):
+- `cpi_imputed` — 1 when no real CPI source (WDI/IMF-curated/IMF-WEO)
+  existed for this country-year. Lets the model learn that imputed-CPI
+  rows are a distinct subpopulation.
 
 Z-scores are winsorized at ±3 SDs (in `08_build_panel.qmd`) so countries
 with tiny historical baselines (e.g., UK's near-zero refugee outflow) don't
 blow up when a small absolute number arrives.
 
-The hybrid (levels for structural V-Dem signals, z-scores for dynamic
+The hybrid (levels for structural regime signals, z-scores for dynamic
 economic/conflict signals) captures both "where this country sits" and "how
-it's moving." With pure within-country z-scoring, UK and Cuba look similar
-on civil-liberties because each one's z-score is computed against its own
-baseline — the raw levels are dropped. The level features fix that.
+it's moving." Three regime-quality levels (civil_liberties, Fariss, polity2)
+are correlated; ridge keeps them all without the collinear sign-flip that
+killed an unpenalized fit (skill 0.044 → 0.007 with Fariss naively added).
 
-de Bruin's `counterbalancing` and `politicization` are loaded into the panel
-but excluded from the v0 fit — coverage gaps cause excessive listwise drop.
+de Bruin's `counterbalancing` and `politicization` remain excluded: source
+coverage ends 2010 and a 14-year carry to 2024 isn't defensible.
 
-**Train/test:** train on 1995–2022; predict unrest in 2023+ on holdout 2023.
+**Train/test:** train on 1995–2022; predict unrest in 2023 on holdout 2023.
 
 ## Libraries
 
@@ -54,6 +63,7 @@ but excluded from the v0 fit — coverage gaps cause excessive listwise drop.
 #| label: setup
 library(DBI)
 library(duckdb)
+library(glmnet)
 ```
 
 ## Pull the labeled panel
@@ -63,21 +73,18 @@ library(duckdb)
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
 
 features <- c(
-  # Absolute level - structural
-  "civil_liberties",
+  # Absolute level — structural (three correlated regime-quality signals;
+  # ridge keeps all three without collinear sign-flip)
+  "civil_liberties", "fariss_hr_score", "polity2",
   # Economic stress (within-country z, region-median-imputed)
   "z_gdp_growth", "z_cpi_inflation", "z_unemployment",
   # Political stress
   "z_political_violence_ord",
   # External / structural
-  "z_refugee_outflow", "z_ffpi_avg", "z_coup_proof_fragmentation"
+  "z_refugee_outflow", "z_ffpi_avg", "z_coup_proof_fragmentation",
+  # Imputation indicator (binary, used raw — not z-scored)
+  "cpi_imputed"
 )
-# Fariss latent HR scores AND Polity5 polity2 are loaded in the panel but
-# excluded from the v0 fit. Both measure "how democratic" on similar
-# dimensions to V-Dem civil_liberties; adding either or both produced
-# collinear sign-flip instability (skill 0.044 -> 0.007 with Fariss,
-# -> 0.000 with Fariss+Polity). v1 fix: ridge regression to keep all three
-# regime-quality signals without coefficient blow-up.
 
 needed_cols <- paste(c("iso3c", "year", "regime_type", "unrest_next_year", features), collapse = ", ")
 panel <- dbGetQuery(con, sprintf("SELECT %s FROM panel_labeled", needed_cols))
@@ -104,7 +111,13 @@ cat("Holdout rows:", nrow(holdout),
     "  | unrest rate:", round(mean(holdout$unrest_next_year), 3), "\n")
 ```
 
-## Fit one model per regime stratum
+## Fit one ridge model per regime stratum
+
+For each stratum: pick lambda via `cv.glmnet` on the full stratum, then
+nonparametric-bootstrap the rows (stratified on the outcome to preserve
+event rate) and refit at the chosen lambda B times. The empirical covariance
+of the B coefficient vectors becomes the drop-in replacement for `vcov()`
+that the dashboard consumes downstream.
 
 ```{r}
 #| label: fit
@@ -116,6 +129,10 @@ regime_labels <- c("0" = "closed_autocracy",
                    "2" = "electoral_democracy",
                    "3" = "liberal_democracy")
 
+B_bootstrap <- 500
+alpha_ridge <- 0  # pure ridge
+set.seed(20260517)
+
 models <- list()
 fit_summary <- data.frame()
 
@@ -126,15 +143,65 @@ for (k in 0:3) {
         nrow(stratum), "rows — skipping\n")
     next
   }
-  fit <- glm(form, data = stratum, family = binomial(link = "logit"))
-  models[[as.character(k)]] <- fit
+
+  # Design matrix — drop intercept column; glmnet adds its own.
+  mm <- model.matrix(form, stratum)
+  x  <- mm[, -1, drop = FALSE]
+  y  <- stratum$unrest_next_year
+
+  # Fewer CV folds when events are sparse so each fold sees ≥3 events.
+  n_events <- sum(y == 1)
+  nfolds   <- if (n_events < 30) 5 else 10
+
+  fit_cv      <- cv.glmnet(x, y, family = "binomial",
+                           alpha = alpha_ridge, nfolds = nfolds)
+  lambda_best <- fit_cv$lambda.min
+
+  coef_full  <- as.numeric(coef(fit_cv, s = "lambda.min"))
+  coef_names <- rownames(coef(fit_cv, s = "lambda.min"))
+  names(coef_full) <- coef_names
+
+  # Bootstrap at the SAME lambda — sampling variability around coefficients
+  # at a fixed regularization, not lambda variability itself.
+  idx_pos <- which(y == 1)
+  idx_neg <- which(y == 0)
+  boot_coefs <- matrix(NA_real_, nrow = B_bootstrap, ncol = length(coef_full),
+                       dimnames = list(NULL, coef_names))
+  for (b in seq_len(B_bootstrap)) {
+    rows <- c(sample(idx_pos, length(idx_pos), replace = TRUE),
+              sample(idx_neg, length(idx_neg), replace = TRUE))
+    fit_b <- glmnet(x[rows, , drop = FALSE], y[rows],
+                    family = "binomial", alpha = alpha_ridge,
+                    lambda = lambda_best)
+    boot_coefs[b, ] <- as.numeric(coef(fit_b))
+  }
+  coef_mean <- colMeans(boot_coefs)
+  coef_vcov <- cov(boot_coefs) + diag(1e-8, length(coef_full))
+
+  models[[as.character(k)]] <- list(
+    fit_cv         = fit_cv,
+    lambda         = lambda_best,
+    feature_order  = coef_names,
+    coefficients   = coef_full,
+    coef_mean      = coef_mean,
+    vcov           = coef_vcov,
+    n_train        = nrow(stratum),
+    n_events       = n_events,
+    nfolds         = nfolds,
+    n_bootstrap    = B_bootstrap
+  )
+
+  dev_idx        <- which.min(abs(fit_cv$lambda - lambda_best))
+  null_dev       <- fit_cv$glmnet.fit$nulldev
+  dev_at_lambda  <- (1 - fit_cv$glmnet.fit$dev.ratio[dev_idx]) * null_dev
   fit_summary <- rbind(fit_summary, data.frame(
     regime    = regime_labels[as.character(k)],
     n_obs     = nrow(stratum),
-    n_unrest  = sum(stratum$unrest_next_year),
-    deviance  = round(fit$deviance, 1),
-    null_dev  = round(fit$null.deviance, 1),
-    pseudo_r2 = round(1 - fit$deviance / fit$null.deviance, 3)
+    n_unrest  = n_events,
+    lambda    = signif(lambda_best, 3),
+    deviance  = round(dev_at_lambda, 1),
+    null_dev  = round(null_dev, 1),
+    pseudo_r2 = round(1 - dev_at_lambda / null_dev, 3)
   ))
 }
 fit_summary
@@ -142,10 +209,16 @@ fit_summary
 
 ## Inspect coefficients (closed autocracy)
 
+Ridge has no closed-form coefficient SE — show point estimate alongside
+the bootstrap SD (sqrt of the empirical-cov diagonal).
+
 ```{r}
 #| label: coef-autocracy
 ca <- models[["0"]]
-co <- summary(ca)$coefficients
+co <- data.frame(
+  estimate = ca$coefficients,
+  boot_sd  = sqrt(diag(ca$vcov))
+)
 rownames(co) <- gsub("^z_", "", rownames(co))
 round(co, 3)
 ```
@@ -155,7 +228,10 @@ round(co, 3)
 ```{r}
 #| label: coef-elect-auto
 ea <- models[["1"]]
-co <- summary(ea)$coefficients
+co <- data.frame(
+  estimate = ea$coefficients,
+  boot_sd  = sqrt(diag(ea$vcov))
+)
 rownames(co) <- gsub("^z_", "", rownames(co))
 round(co, 3)
 ```
@@ -170,12 +246,15 @@ can load them without re-fitting.
 dir.create("../data/model", showWarnings = FALSE, recursive = TRUE)
 saveRDS(
   list(
-    models       = models,
-    features     = features,
+    models        = models,
+    features      = features,
+    formula       = form,
     regime_labels = regime_labels,
-    train_years  = c(min(train$year), max(train$year)),
-    n_train      = nrow(train),
-    fitted_at    = Sys.time()
+    train_years   = c(min(train$year), max(train$year)),
+    n_train       = nrow(train),
+    model_version = "unrest-risk-v0.2-ridge",
+    n_bootstrap   = B_bootstrap,
+    fitted_at     = Sys.time()
   ),
   "../data/model/fit.rds"
 )

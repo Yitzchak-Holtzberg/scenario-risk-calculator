@@ -26,6 +26,7 @@ corresponds to a ~20% empirical rate.
 library(DBI)
 library(duckdb)
 library(ggplot2)
+library(glmnet)
 source("_helpers.R")
 ```
 
@@ -36,6 +37,7 @@ source("_helpers.R")
 fit <- readRDS("../data/model/fit.rds")
 models   <- fit$models
 features <- fit$features
+form     <- fit$formula
 
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
 needed_cols <- paste(c("iso3c", "year", "regime_type", "unrest_next_year", features), collapse = ", ")
@@ -51,7 +53,9 @@ cat("Holdout rows:", nrow(holdout),
 
 ## Score the holdout
 
-Each row uses the model for its regime stratum.
+Each row uses the ridge model for its regime stratum. `glmnet`'s `predict()`
+wants the design matrix as `newx` (not a `newdata` data.frame), so build it
+with the same formula the fit used.
 
 ```{r}
 #| label: score
@@ -59,7 +63,12 @@ holdout$pred <- NA_real_
 for (k in names(models)) {
   idx <- holdout$regime_type == as.integer(k)
   if (any(idx)) {
-    holdout$pred[idx] <- predict(models[[k]], newdata = holdout[idx, ], type = "response")
+    mm_h <- model.matrix(form, holdout[idx, ])
+    x_h  <- mm_h[, -1, drop = FALSE]
+    holdout$pred[idx] <- as.numeric(predict(models[[k]]$fit_cv,
+                                            newx = x_h,
+                                            s    = "lambda.min",
+                                            type = "response"))
   }
 }
 holdout <- holdout[!is.na(holdout$pred), ]

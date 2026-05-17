@@ -13,26 +13,30 @@ execute:
 The World Bank WDI has inflation gaps for the countries that matter most for
 political-risk forecasting — Cuba (all years NA), North Korea, parts of Syria
 and Eritrea — and politically-managed series for others (Venezuela, Argentina,
-Zimbabwe, Lebanon). This notebook lands two manually-curated supplement
-tables:
+Zimbabwe, Lebanon). This notebook lands three supplement tables:
 
-- **`imf_inflation`** — IMF Staff estimates (Article IV consultations + WEO
-  projections). These are the conservative end of credible estimates and
-  what most journalists cite for "official IMF figures."
+- **`imf_inflation`** — hand-curated IMF Staff estimates (Article IV
+  consultations + WEO projections). High-trust crisis-country numbers,
+  reviewed line-by-line. Covers Cuba (where WEO has nothing) and the
+  politically-managed series for Venezuela/Argentina/Zimbabwe/Lebanon.
+- **`imf_weo`** — bulk IMF World Economic Outlook database (PCPIPCH series,
+  "consumer prices, percent change"). Parsed from the wide-form CSV the
+  IMF Data portal exports. Provides continuous 1980–present coverage for
+  ~200 countries — the broad backfill behind the hand-curated values.
 - **`hanke_inflation`** — Steve Hanke (Johns Hopkins) Troubled Currencies
   Project estimates, derived from free-market exchange-rate decay. These
   are systematically 2-10x higher than IMF/national figures because they
   capture unofficial/black-market reality. Used by CNN and others when
   reporting "hyperinflation."
 
-The panel build (08) does **WDI → IMF backfill** by default. The Hanke
-table is loaded separately and exposed to the dashboard as a toggle so
-users can see what predictions look like under the more aggressive
-estimates.
+The panel build (08) uses a **WDI → imf_inflation (curated) → imf_weo
+(bulk) → region-median** COALESCE chain. Hand-curated wins over the bulk
+file so reviewed crisis values aren't overwritten by WEO defaults. The
+Hanke table is loaded separately and exposed to the dashboard as a toggle.
 
-Data is in `data/curated/*.csv` — both CSVs are version-controlled and updated
-manually as new IMF/Hanke reports come out (next update: when IMF WEO April
-2025 releases).
+`data/curated/*.csv` is version-controlled (hand-maintained).
+`data/raw/imf_weo_*.csv` is gitignored (large, re-downloadable) — pull
+from https://data.imf.org/en/datasets/IMF.RES:WEO when refreshing.
 
 ## Libraries
 
@@ -55,6 +59,58 @@ cat("Countries covered:", length(unique(imf$iso3c)), "\n")
 print(table(imf$iso3c))
 ```
 
+## Load IMF WEO bulk file
+
+The WEO CSV is wide: ~65 metadata columns followed by year columns 1980–2031.
+Each row is one (country, indicator) pair. We filter to PCPIPCH (CPI percent
+change), pivot to long, drop the IMF country-aggregates (codes ending in
+`Q`, e.g. CAQ = Caribbean) since the panel only knows ISO3 country codes.
+
+```{r}
+#| label: weo
+weo_path <- "../data/raw/imf_weo_2026_04.csv"
+
+if (!file.exists(weo_path)) {
+  stop("Missing ", weo_path,
+       ". Download the bulk CSV from https://data.imf.org/en/datasets/IMF.RES:WEO ",
+       "and save to that path. The file is gitignored (~26MB).")
+}
+
+weo_wide <- read.csv(weo_path, check.names = FALSE, stringsAsFactors = FALSE,
+                     fileEncoding = "UTF-8-BOM", na.strings = c("", "NA"))
+
+# Filter to the CPI percent-change series.
+weo_wide <- weo_wide[grepl("\\.PCPIPCH\\.A$", weo_wide$SERIES_CODE), ]
+cat("PCPIPCH series in WEO file:", nrow(weo_wide), "\n")
+
+# Extract ISO3 from SERIES_CODE (first dotted segment).
+weo_wide$iso3c <- sub("\\..*", "", weo_wide$SERIES_CODE)
+
+# Drop IMF country-aggregate codes (4th char Q in 3-letter codes won't happen;
+# the aggregates use codes like CAQ/CBQ/CMQ that end in Q). Real ISO3 codes
+# never end in Q, so this is safe.
+weo_wide <- weo_wide[!grepl("Q$", weo_wide$iso3c), ]
+
+# Identify year columns (1980-2031 as strings).
+year_cols <- grep("^(19|20)[0-9]{2}$", names(weo_wide), value = TRUE)
+
+# Reshape to long form.
+weo_long <- do.call(rbind, lapply(year_cols, function(y) {
+  data.frame(
+    iso3c          = weo_wide$iso3c,
+    year           = as.integer(y),
+    cpi_inflation  = suppressWarnings(as.numeric(weo_wide[[y]])),
+    stringsAsFactors = FALSE
+  )
+}))
+weo_long <- weo_long[!is.na(weo_long$cpi_inflation), ]
+weo_long$source <- "IMF WEO April 2026 (data.imf.org bulk export)"
+
+cat("WEO long rows:", nrow(weo_long), "\n")
+cat("Distinct countries:", length(unique(weo_long$iso3c)), "\n")
+cat("Year span:", min(weo_long$year), "-", max(weo_long$year), "\n")
+```
+
 ## Load Hanke inflation estimates
 
 ```{r}
@@ -74,12 +130,15 @@ print(table(hanke$iso3c))
 ```{r}
 #| label: write
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
-dbWriteTable(con, "imf_inflation",   imf,   overwrite = TRUE)
-dbWriteTable(con, "hanke_inflation", hanke, overwrite = TRUE)
+dbWriteTable(con, "imf_inflation",   imf,      overwrite = TRUE)
+dbWriteTable(con, "imf_weo",         weo_long, overwrite = TRUE)
+dbWriteTable(con, "hanke_inflation", hanke,    overwrite = TRUE)
 dbGetQuery(con, "
-  SELECT 'imf' AS source, COUNT(*) AS rows FROM imf_inflation
+  SELECT 'imf_curated' AS source, COUNT(*) AS rows FROM imf_inflation
   UNION ALL
-  SELECT 'hanke', COUNT(*) FROM hanke_inflation
+  SELECT 'imf_weo',     COUNT(*) FROM imf_weo
+  UNION ALL
+  SELECT 'hanke',       COUNT(*) FROM hanke_inflation
 ")
 ```
 
