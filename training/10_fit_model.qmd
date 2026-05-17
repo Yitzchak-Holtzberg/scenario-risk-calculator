@@ -15,18 +15,23 @@ predicting `unrest_next_year` from six z-scored covariates. Coefficients and
 the variance-covariance matrix are saved so the dashboard can reproduce
 predictions *and* compute 90% CIs by sampling from `MVN(coef, vcov)`.
 
-**Features (7):**
+**Features (6):**
 
-*Absolute-level (raw V-Dem indices)* — "where this country sits structurally":
+*Absolute-level* — "where this country sits structurally":
 - `civil_liberties` — V-Dem 0–1 index
-- `freedom_expression` — V-Dem 0–1 index
 
-*Within-country z-scored* — "how stressed vs this country's own history":
+*Within-country z* — "how stressed vs the country's own history":
 - `z_gdp_growth` — economic shock
-- `z_refugee_outflow` — population-leaving shock
+- `z_refugee_outflow` — population-leaving shock (log1p before z)
 - `z_political_violence_ord` — recent violence vs own norm
 - `z_ffpi_avg` — global food-price pressure
 - `z_coup_proof_fragmentation` — Pilster-Böhmelt effective-number of forces
+
+**Why not more features?** Tried adding `z_cpi_inflation`, `z_unemployment`,
+`z_regime_support_locus`. Brier skill dropped 0.062 → 0.025 because countries
+with data gaps (e.g. Cuba doesn't report CPI to the World Bank) got
+median-imputed synthetic values that introduced noise rather than signal.
+Proper fix is country/region-specific imputation, deferred to v1.
 
 Z-scores are winsorized at ±3 SDs (in `08_build_panel.qmd`) so countries
 with tiny historical baselines (e.g., UK's near-zero refugee outflow) don't
@@ -58,16 +63,17 @@ library(duckdb)
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
 
 features <- c(
-  # Absolute level - structural "where this country sits"
-  # (dropped freedom_expression - too collinear with civil_liberties; the
-  # joint fit produced sign-flipped coefficients on one of them. V-Dem's
-  # core democracy indices correlate ~0.85+ cross-sectionally so we keep
-  # just one.)
+  # Absolute level - structural
   "civil_liberties",
-  # Within-country z-scores - "how stressed vs this country's own history"
+  # Within-country z-scores - dynamics
   "z_gdp_growth", "z_refugee_outflow", "z_political_violence_ord",
   "z_ffpi_avg", "z_coup_proof_fragmentation"
 )
+# v0 NOTE: tried adding z_cpi_inflation, z_unemployment, z_regime_support_locus
+# but it hurt calibration (Brier skill 0.062 -> 0.025) because countries with
+# data gaps got median-imputed values that introduced noise rather than
+# signal. Proper fix is country-specific imputation (e.g. carry-forward,
+# regional median) - deferred to v1.
 
 needed_cols <- paste(c("iso3c", "year", "regime_type", "unrest_next_year", features), collapse = ", ")
 panel <- dbGetQuery(con, sprintf("SELECT %s FROM panel_labeled", needed_cols))

@@ -270,11 +270,15 @@ for (f in list.files("../artifacts", pattern = "\\.json$")) {
   cat(sprintf("  %-30s %8s bytes\n", f, format(size, big.mark = ",")))
 }
 
-# Spot-check Cuba
+# Spot-check Cuba (defensive: skip if not in snapshot for any reason)
 cat("\n=== Cuba snapshot ===\n")
 cuba <- snapshot_rows[["CUB"]]
-cat("  Regime:                ", cuba$regime_label, "\n")
-cat("  Snapshot year:         ", cuba$snapshot_year, "\n")
-cat("  Predicted probability: ", round(cuba$predicted_probability, 3), "\n")
-cat("  90% CI:                ", round(cuba$ci_lo_90, 3), "to", round(cuba$ci_hi_90, 3), "\n")
+if (is.null(cuba)) {
+  cat("  (Cuba not in snapshot - check data coverage)\n")
+} else {
+  cat("  Regime:                ", cuba$regime_label, "\n")
+  cat("  Snapshot year:         ", cuba$snapshot_year, "\n")
+  cat("  Predicted probability: ", round(cuba$predicted_probability, 3), "\n")
+  cat("  90% CI:                ", round(cuba$ci_lo_90, 3), "to", round(cuba$ci_hi_90, 3), "\n")
+}
 ```

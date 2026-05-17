@@ -141,8 +141,7 @@ z_within <- function(x) {
 
 # Some features are heavily skewed (e.g. refugee_outflow: most countries
 # near zero, a few in the hundreds of thousands). Log-transform before
-# z-scoring so the z reflects meaningful variation across the whole range
-# rather than amplifying noise at the bottom and compressing it at the top.
+# z-scoring so the z reflects meaningful variation across the whole range.
 log_features <- c("refugee_outflow")
 
 panel <- raw
