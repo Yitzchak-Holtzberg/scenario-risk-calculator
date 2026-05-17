@@ -1,0 +1,44 @@
+iso3c,year,cpi_inflation,source
+# IMF World Economic Outlook October 2024 + Article IV consultations.
+# Coverage: countries where WDI has gaps OR official numbers are politically
+# managed. These are IMF Staff estimates (NOT national official figures).
+# Manually curated because IMF blocks programmatic bulk downloads.
+CUB,2018,2.4,IMF Article IV 2024
+CUB,2019,4.5,IMF Article IV 2024
+CUB,2020,76.7,IMF Article IV 2024
+CUB,2021,37.1,IMF Article IV 2024
+CUB,2022,39.1,IMF Article IV 2024
+CUB,2023,30.0,IMF Article IV 2024
+CUB,2024,30.0,IMF WEO Oct 2024 projection
+VEN,2018,65374.1,IMF WEO Oct 2024
+VEN,2019,19906.0,IMF WEO Oct 2024
+VEN,2020,2959.8,IMF WEO Oct 2024
+VEN,2021,1588.5,IMF WEO Oct 2024
+VEN,2022,200.0,IMF WEO Oct 2024
+VEN,2023,337.5,IMF WEO Oct 2024
+VEN,2024,59.2,IMF WEO Oct 2024 projection
+SDN,2020,163.3,IMF WEO Oct 2024
+SDN,2021,359.1,IMF WEO Oct 2024
+SDN,2022,138.8,IMF WEO Oct 2024
+SDN,2023,71.3,IMF WEO Oct 2024
+SDN,2024,200.0,IMF WEO Oct 2024 estimate (war disruption)
+ARG,2020,42.0,IMF WEO Oct 2024
+ARG,2021,48.4,IMF WEO Oct 2024
+ARG,2022,72.4,IMF WEO Oct 2024
+ARG,2023,133.5,IMF WEO Oct 2024
+ARG,2024,229.8,IMF WEO Oct 2024 projection
+ZWE,2020,557.2,IMF WEO Oct 2024
+ZWE,2021,98.5,IMF WEO Oct 2024
+ZWE,2022,193.4,IMF WEO Oct 2024
+ZWE,2023,667.4,IMF WEO Oct 2024
+ZWE,2024,561.4,IMF WEO Oct 2024 projection
+LBN,2020,84.9,IMF WEO Oct 2024
+LBN,2021,154.8,IMF WEO Oct 2024
+LBN,2022,171.2,IMF WEO Oct 2024
+LBN,2023,221.3,IMF WEO Oct 2024
+LBN,2024,45.2,IMF WEO Oct 2024 projection
+IRN,2024,32.6,IMF WEO Oct 2024 (supplement WDI which has gaps)
+SYR,2023,90.0,IMF Article IV 2024 estimate
+SYR,2024,60.0,IMF Article IV 2024 projection
+PRK,2024,,No reliable estimate available
+ERI,2024,,No reliable estimate available

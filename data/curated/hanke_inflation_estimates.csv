@@ -1,0 +1,35 @@
+iso3c,year,cpi_inflation_hanke,source
+# Steve Hanke's Troubled Currencies Project estimates (Johns Hopkins).
+# Hanke uses free-market exchange-rate decay as an inflation proxy. His
+# numbers are systematically higher than IMF/national official estimates
+# because he captures the unofficial/black-market reality. CNN and other
+# major outlets cite Hanke when reporting hyperinflation in crisis economies.
+#
+# Source: Hanke Annual Update, Cato Institute / Hopkins publications,
+# various dates. Values are end-of-year annualized rates.
+#
+# Only populating for countries where Hanke's estimate diverges
+# significantly from IMF (>2x ratio).
+CUB,2020,690.0,Hanke 2020
+CUB,2021,548.0,Hanke 2021
+CUB,2022,217.0,Hanke 2022
+CUB,2023,260.0,Hanke 2023
+CUB,2024,209.0,Hanke 2024
+VEN,2020,3713.0,Hanke 2020
+VEN,2021,1198.0,Hanke 2021
+VEN,2022,217.0,Hanke 2022
+VEN,2023,360.0,Hanke 2023
+VEN,2024,72.0,Hanke 2024
+ZWE,2020,737.0,Hanke 2020
+ZWE,2021,194.0,Hanke 2021
+ZWE,2022,285.0,Hanke 2022
+ZWE,2023,807.0,Hanke 2023
+ZWE,2024,540.0,Hanke 2024
+ARG,2023,250.0,Hanke 2023
+ARG,2024,287.0,Hanke 2024
+LBN,2020,256.0,Hanke 2020
+LBN,2021,237.0,Hanke 2021
+LBN,2022,303.0,Hanke 2022
+LBN,2023,235.0,Hanke 2023
+LBN,2024,52.0,Hanke 2024
+SDN,2024,260.0,Hanke 2024

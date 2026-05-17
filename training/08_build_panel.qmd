@@ -73,7 +73,7 @@ raw <- dbGetQuery(con, "
     v.v2caautmob_ord     AS autoc_mobilization_ord,
     v.v2cademmob_ord     AS demoz_mobilization_ord,
     v.v2caviol_ord       AS political_violence_ord,
-    w.cpi_inflation,
+    COALESCE(w.cpi_inflation, imf.cpi_inflation) AS cpi_inflation,
     w.gdp_growth,
     w.gdp_per_cap,
     w.trade_pct_gdp,
@@ -99,6 +99,7 @@ raw <- dbGetQuery(con, "
   LEFT JOIN security_forces sf   ON c.iso3c = sf.iso3c AND v.year = sf.year
   LEFT JOIN fariss_hr fh         ON c.iso3c = fh.iso3c AND v.year = fh.year
   LEFT JOIN polity5 pol          ON c.iso3c = pol.iso3c AND v.year = pol.year
+  LEFT JOIN imf_inflation imf    ON c.iso3c = imf.iso3c AND v.year = imf.year
   WHERE c.region IS NOT NULL
   ORDER BY c.iso3c, v.year
 ")

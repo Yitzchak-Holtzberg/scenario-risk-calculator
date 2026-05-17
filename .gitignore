@@ -7,6 +7,8 @@ data/*.duckdb.wal
 *.parquet
 !artifacts/**/*.csv
 !artifacts/**/*.parquet
+# Hand-curated supplement values (IMF inflation, Hanke estimates) - tracked
+!data/curated/**/*.csv
 
 # --- Go (api/) -------------------------------------------------------------
 api/bin/

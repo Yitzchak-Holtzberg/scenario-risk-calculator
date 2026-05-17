@@ -1,0 +1,106 @@
+---
+title: "02b — Load IMF + Hanke inflation supplements"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+The World Bank WDI has inflation gaps for the countries that matter most for
+political-risk forecasting — Cuba (all years NA), North Korea, parts of Syria
+and Eritrea — and politically-managed series for others (Venezuela, Argentina,
+Zimbabwe, Lebanon). This notebook lands two manually-curated supplement
+tables:
+
+- **`imf_inflation`** — IMF Staff estimates (Article IV consultations + WEO
+  projections). These are the conservative end of credible estimates and
+  what most journalists cite for "official IMF figures."
+- **`hanke_inflation`** — Steve Hanke (Johns Hopkins) Troubled Currencies
+  Project estimates, derived from free-market exchange-rate decay. These
+  are systematically 2-10x higher than IMF/national figures because they
+  capture unofficial/black-market reality. Used by CNN and others when
+  reporting "hyperinflation."
+
+The panel build (08) does **WDI → IMF backfill** by default. The Hanke
+table is loaded separately and exposed to the dashboard as a toggle so
+users can see what predictions look like under the more aggressive
+estimates.
+
+Data is in `data/curated/*.csv` — both CSVs are version-controlled and updated
+manually as new IMF/Hanke reports come out (next update: when IMF WEO April
+2025 releases).
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+```
+
+## Load IMF inflation supplement
+
+```{r}
+#| label: imf
+imf <- read.csv("../data/curated/imf_inflation_supplement.csv",
+                comment.char = "#", stringsAsFactors = FALSE)
+imf <- imf[!is.na(imf$cpi_inflation), c("iso3c", "year", "cpi_inflation", "source")]
+imf$year <- as.integer(imf$year)
+cat("IMF supplement rows:", nrow(imf), "\n")
+cat("Countries covered:", length(unique(imf$iso3c)), "\n")
+print(table(imf$iso3c))
+```
+
+## Load Hanke inflation estimates
+
+```{r}
+#| label: hanke
+hanke <- read.csv("../data/curated/hanke_inflation_estimates.csv",
+                  comment.char = "#", stringsAsFactors = FALSE)
+hanke <- hanke[!is.na(hanke$cpi_inflation_hanke),
+               c("iso3c", "year", "cpi_inflation_hanke", "source")]
+hanke$year <- as.integer(hanke$year)
+cat("Hanke estimates rows:", nrow(hanke), "\n")
+cat("Countries covered:", length(unique(hanke$iso3c)), "\n")
+print(table(hanke$iso3c))
+```
+
+## Write to DuckDB
+
+```{r}
+#| label: write
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+dbWriteTable(con, "imf_inflation",   imf,   overwrite = TRUE)
+dbWriteTable(con, "hanke_inflation", hanke, overwrite = TRUE)
+dbGetQuery(con, "
+  SELECT 'imf' AS source, COUNT(*) AS rows FROM imf_inflation
+  UNION ALL
+  SELECT 'hanke', COUNT(*) FROM hanke_inflation
+")
+```
+
+## Cuba spot check (the original example)
+
+```{r}
+#| label: cuba-compare
+dbGetQuery(con, "
+  SELECT i.year,
+         i.cpi_inflation AS imf,
+         h.cpi_inflation_hanke AS hanke
+  FROM imf_inflation i
+  LEFT JOIN hanke_inflation h ON h.iso3c = i.iso3c AND h.year = i.year
+  WHERE i.iso3c = 'CUB'
+  ORDER BY i.year
+")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

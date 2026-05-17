@@ -1,0 +1,35 @@
+{
+  "source": "Steve Hanke Troubled Currencies Project (Cato/Hopkins)",
+  "countries": {
+    "CUB": {
+      "iso3c": "CUB",
+      "year": 2024,
+      "cpi_inflation": 209
+    },
+    "VEN": {
+      "iso3c": "VEN",
+      "year": 2024,
+      "cpi_inflation": 72
+    },
+    "ZWE": {
+      "iso3c": "ZWE",
+      "year": 2024,
+      "cpi_inflation": 540
+    },
+    "ARG": {
+      "iso3c": "ARG",
+      "year": 2024,
+      "cpi_inflation": 287
+    },
+    "LBN": {
+      "iso3c": "LBN",
+      "year": 2024,
+      "cpi_inflation": 52
+    },
+    "SDN": {
+      "iso3c": "SDN",
+      "year": 2024,
+      "cpi_inflation": 260
+    }
+  }
+}

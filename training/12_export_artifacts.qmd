@@ -248,6 +248,38 @@ write_json(list(
 cat("Wrote artifacts/country_snapshot.json\n")
 ```
 
+## Build hanke_inflation.json (dashboard toggle data)
+
+Steve Hanke's Troubled Currencies Project estimates for hyperinflation
+countries — exposed as a separate artifact so the dashboard can offer a
+"see what the prediction looks like with Hanke's higher estimates" toggle
+without re-fitting the model. Keys are iso3c → latest-year inflation %.
+
+```{r}
+#| label: hanke-export
+hanke_raw <- dbGetQuery(
+  dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb", read_only = TRUE),
+  "SELECT iso3c, year, cpi_inflation_hanke FROM hanke_inflation"
+)
+# For each country: pick the latest year's Hanke estimate.
+hanke_latest <- list()
+for (iso in unique(hanke_raw$iso3c)) {
+  rows <- hanke_raw[hanke_raw$iso3c == iso, ]
+  rows <- rows[order(-rows$year), ]
+  hanke_latest[[iso]] <- list(
+    iso3c = iso,
+    year  = as.integer(rows$year[1]),
+    cpi_inflation = unname(rows$cpi_inflation_hanke[1])
+  )
+}
+
+write_json(list(
+  source = "Steve Hanke Troubled Currencies Project (Cato/Hopkins)",
+  countries = hanke_latest
+), "../artifacts/hanke_inflation.json", auto_unbox = TRUE, pretty = TRUE)
+cat("Wrote artifacts/hanke_inflation.json — countries:", length(hanke_latest), "\n")
+```
+
 ## Build calibration.json
 
 ```{r}
