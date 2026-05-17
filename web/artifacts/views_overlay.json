@@ -1,0 +1,1159 @@
+{
+  "aggregation": "one_minus_product_of_complements",
+  "as_of": "2026-05-17",
+  "countries": {
+    "AFG": {
+      "country": "Afghanistan",
+      "monthly_max": 0.9993,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "AGO": {
+      "country": "Angola",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ALB": {
+      "country": "Albania",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ARE": {
+      "country": "United Arab Emirates",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ARG": {
+      "country": "Argentina",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ARM": {
+      "country": "Armenia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ATG": {
+      "country": "Antigua and Barbuda",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "AUS": {
+      "country": "Australia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "AUT": {
+      "country": "Austria",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "AZE": {
+      "country": "Azerbaijan",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BDI": {
+      "country": "Burundi",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BEL": {
+      "country": "Belgium",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BEN": {
+      "country": "Benin",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BFA": {
+      "country": "Burkina Faso",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "BGD": {
+      "country": "Bangladesh",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BGR": {
+      "country": "Bulgaria",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BHR": {
+      "country": "Bahrain",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BHS": {
+      "country": "Bahamas",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BIH": {
+      "country": "Bosnia and Herzegovina",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BLR": {
+      "country": "Belarus",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BLZ": {
+      "country": "Belize",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BOL": {
+      "country": "Bolivia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BRA": {
+      "country": "Brazil",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BRB": {
+      "country": "Barbados",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BRN": {
+      "country": "Brunei",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BTN": {
+      "country": "Bhutan",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "BWA": {
+      "country": "Botswana",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CAF": {
+      "country": "Central African Republic",
+      "monthly_max": 0.0504,
+      "n_months_covered": 12,
+      "probability": 0.2274
+    },
+    "CAN": {
+      "country": "Canada",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CHE": {
+      "country": "Switzerland",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CHL": {
+      "country": "Chile",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CHN": {
+      "country": "China",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CIV": {
+      "country": "Cote d'Ivoire",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CMR": {
+      "country": "Cameroon",
+      "monthly_max": 0.9338,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "COD": {
+      "country": "Congo, DRC",
+      "monthly_max": 0.9997,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "COG": {
+      "country": "Congo",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "COL": {
+      "country": "Colombia",
+      "monthly_max": 0.9723,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "COM": {
+      "country": "Comoros",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CPV": {
+      "country": "Cape Verde",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CRI": {
+      "country": "Costa Rica",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CUB": {
+      "country": "Cuba",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CYP": {
+      "country": "Cyprus",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "CZE": {
+      "country": "Czech Republic",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "DEU": {
+      "country": "Germany",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "DJI": {
+      "country": "Djibouti",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "DMA": {
+      "country": "Dominica",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "DNK": {
+      "country": "Denmark",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "DOM": {
+      "country": "Dominican Republic",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "DZA": {
+      "country": "Algeria",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ECU": {
+      "country": "Ecuador",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "EGY": {
+      "country": "Egypt",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ERI": {
+      "country": "Eritrea",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ESP": {
+      "country": "Spain",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "EST": {
+      "country": "Estonia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ETH": {
+      "country": "Ethiopia",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "FIN": {
+      "country": "Finland",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "FJI": {
+      "country": "Fiji",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "FRA": {
+      "country": "France",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "FSM": {
+      "country": "Micronesia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GAB": {
+      "country": "Gabon",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GBR": {
+      "country": "United Kingdom",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GEO": {
+      "country": "Georgia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GHA": {
+      "country": "Ghana",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GIN": {
+      "country": "Guinea",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GMB": {
+      "country": "The Gambia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GNB": {
+      "country": "Guinea-Bissau",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GNQ": {
+      "country": "Equatorial Guinea",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GRC": {
+      "country": "Greece",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GRD": {
+      "country": "Grenada",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GTM": {
+      "country": "Guatemala",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "GUY": {
+      "country": "Guyana",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "HND": {
+      "country": "Honduras",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "HRV": {
+      "country": "Croatia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "HTI": {
+      "country": "Haiti",
+      "monthly_max": 0.9723,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "HUN": {
+      "country": "Hungary",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "IDN": {
+      "country": "Indonesia",
+      "monthly_max": 0.0025,
+      "n_months_covered": 12,
+      "probability": 0.0086
+    },
+    "IND": {
+      "country": "India",
+      "monthly_max": 0.9917,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "IRL": {
+      "country": "Ireland",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "IRN": {
+      "country": "Iran",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "IRQ": {
+      "country": "Iraq",
+      "monthly_max": 0.0025,
+      "n_months_covered": 12,
+      "probability": 0.0141
+    },
+    "ISL": {
+      "country": "Iceland",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ISR": {
+      "country": "Israel",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "ITA": {
+      "country": "Italy",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "JAM": {
+      "country": "Jamaica",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "JOR": {
+      "country": "Jordan",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "JPN": {
+      "country": "Japan",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "KAZ": {
+      "country": "Kazakhstan",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "KEN": {
+      "country": "Kenya",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "KGZ": {
+      "country": "Kyrgyzstan",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "KHM": {
+      "country": "Cambodia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "KIR": {
+      "country": "Kiribati",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "KNA": {
+      "country": "St. Kitts and Nevis",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "KOR": {
+      "country": "South Korea",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "KWT": {
+      "country": "Kuwait",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "LAO": {
+      "country": "Laos",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "LBN": {
+      "country": "Lebanon",
+      "monthly_max": 0.9985,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "LBR": {
+      "country": "Liberia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "LBY": {
+      "country": "Libya",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "LCA": {
+      "country": "St. Lucia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "LKA": {
+      "country": "Sri Lanka",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "LSO": {
+      "country": "Lesotho",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "LTU": {
+      "country": "Lithuania",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "LUX": {
+      "country": "Luxembourg",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "LVA": {
+      "country": "Latvia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MAR": {
+      "country": "Morocco",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MDA": {
+      "country": "Moldova",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MDG": {
+      "country": "Madagascar",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MDV": {
+      "country": "Maldives",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MEX": {
+      "country": "Mexico",
+      "monthly_max": 0.0259,
+      "n_months_covered": 12,
+      "probability": 0.0379
+    },
+    "MHL": {
+      "country": "Marshall Is.",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MKD": {
+      "country": "Macedonia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MLI": {
+      "country": "Mali",
+      "monthly_max": 0.9999,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "MLT": {
+      "country": "Malta",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MMR": {
+      "country": "Myanmar",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "MNE": {
+      "country": "Montenegro",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MNG": {
+      "country": "Mongolia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MOZ": {
+      "country": "Mozambique",
+      "monthly_max": 0.4581,
+      "n_months_covered": 12,
+      "probability": 0.9545
+    },
+    "MRT": {
+      "country": "Mauritania",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MUS": {
+      "country": "Mauritius",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MWI": {
+      "country": "Malawi",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "MYS": {
+      "country": "Malaysia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "NAM": {
+      "country": "Namibia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "NER": {
+      "country": "Niger",
+      "monthly_max": 0.9991,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "NGA": {
+      "country": "Nigeria",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "NIC": {
+      "country": "Nicaragua",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "NLD": {
+      "country": "Netherlands",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "NOR": {
+      "country": "Norway",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "NPL": {
+      "country": "Nepal",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "NRU": {
+      "country": "Nauru",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "NZL": {
+      "country": "New Zealand",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "OMN": {
+      "country": "Oman",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "PAK": {
+      "country": "Pakistan",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "PAN": {
+      "country": "Panama",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "PER": {
+      "country": "Peru",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "PHL": {
+      "country": "Philippines",
+      "monthly_max": 0.0014,
+      "n_months_covered": 12,
+      "probability": 0.0094
+    },
+    "PLW": {
+      "country": "Palau",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "PNG": {
+      "country": "Papua New Guinea",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "POL": {
+      "country": "Poland",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "PRK": {
+      "country": "North Korea",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "PRT": {
+      "country": "Portugal",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "PRY": {
+      "country": "Paraguay",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "QAT": {
+      "country": "Qatar",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ROU": {
+      "country": "Romania",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "RUS": {
+      "country": "Russia",
+      "monthly_max": 0.3116,
+      "n_months_covered": 12,
+      "probability": 0.7129
+    },
+    "RWA": {
+      "country": "Rwanda",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SAU": {
+      "country": "Saudi Arabia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SDN": {
+      "country": "Sudan",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "SEN": {
+      "country": "Senegal",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SGP": {
+      "country": "Singapore",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SLB": {
+      "country": "Solomon Is.",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SLE": {
+      "country": "Sierra Leone",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SLV": {
+      "country": "El Salvador",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SOM": {
+      "country": "Somalia",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "SRB": {
+      "country": "Serbia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SSD": {
+      "country": "South Sudan",
+      "monthly_max": 0.9852,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "STP": {
+      "country": "Sao Tome and Principe",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SUR": {
+      "country": "Suriname",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SVK": {
+      "country": "Slovakia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SVN": {
+      "country": "Slovenia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SWE": {
+      "country": "Sweden",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SWZ": {
+      "country": "Swaziland",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SYC": {
+      "country": "Seychelles",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "SYR": {
+      "country": "Syria",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "TCD": {
+      "country": "Chad",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TGO": {
+      "country": "Togo",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "THA": {
+      "country": "Thailand",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TJK": {
+      "country": "Tajikistan",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TKM": {
+      "country": "Turkmenistan",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TLS": {
+      "country": "Timor Leste",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TON": {
+      "country": "Tonga",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TTO": {
+      "country": "Trinidad and Tobago",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TUN": {
+      "country": "Tunisia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TUR": {
+      "country": "Turkey",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TUV": {
+      "country": "Tuvalu",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TWN": {
+      "country": "Taiwan",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "TZA": {
+      "country": "Tanzania",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "UGA": {
+      "country": "Uganda",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "UKR": {
+      "country": "Ukraine",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "URY": {
+      "country": "Uruguay",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "USA": {
+      "country": "United States",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "UZB": {
+      "country": "Uzbekistan",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "VCT": {
+      "country": "St. Vincent and the Grenadines",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "VEN": {
+      "country": "Venezuela",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "VNM": {
+      "country": "Vietnam",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "VUT": {
+      "country": "Vanuatu",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "WSM": {
+      "country": "Samoa",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "XKX": {
+      "country": "Kosovo",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "YEM": {
+      "country": "Yemen",
+      "monthly_max": 1.0,
+      "n_months_covered": 12,
+      "probability": 1.0
+    },
+    "ZAF": {
+      "country": "South Africa",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ZMB": {
+      "country": "Zambia",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    },
+    "ZWE": {
+      "country": "Zimbabwe",
+      "monthly_max": 0.0,
+      "n_months_covered": 12,
+      "probability": 0.0
+    }
+  },
+  "license": "See https://viewsforecasting.org for current license terms (confirm before re-publishing).",
+  "outcome_note": "Probability of state-based armed conflict (>=25 fatalities/month) in at least one of the next 12 months on the territory of the country. Covers only the armed-conflict component of the model outcome \u2014 not the coup or protest components.",
+  "run_id": "fatalities003_2026_03_t01",
+  "source": "ViEWS (Uppsala / PRIO)",
+  "source_url": "https://viewsforecasting.org",
+  "window_end": "2027-03",
+  "window_start": "2026-04"
+}

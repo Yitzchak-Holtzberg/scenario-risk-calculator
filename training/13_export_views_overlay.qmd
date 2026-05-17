@@ -1,0 +1,175 @@
+---
+title: "13 — Export ViEWS dashboard overlay"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Fetches the latest ViEWS country-month conflict forecast and writes
+`../artifacts/views_overlay.json` for the dashboard's "ViEWS" benchmark
+row. **Not** part of the model pipeline — runs independently so the
+overlay can refresh on a different cadence (ViEWS publishes ~monthly)
+than the model fit.
+
+ViEWS forecasts state-based armed conflict (≥25 fatalities/month) on the
+territory of each country. We aggregate the 12 months following the
+run date into a single annual probability:
+
+    P(year) = 1 - prod(1 - main_dich[m])  over the 12-month window
+
+Saturation at 1.0 for active-conflict countries (Ukraine, Sudan, Myanmar,
+Iran, etc.) is meaningful — ViEWS is essentially certain.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(httr2)
+library(jsonlite)
+library(readr)
+library(dplyr)
+library(purrr)
+```
+
+## Discover the latest published run
+
+ViEWS publishes CSVs under
+`https://viewsforecasting.org/wp-content/uploads/{upload_year}/{upload_month}/fatalities003_{data_year}_{data_month}_t01_cm.csv`.
+The upload month typically lags the data month by 1 (e.g. data-month
+2026-03 is uploaded under `2026/04/`). We walk backwards from the
+current month until we find a 200 response.
+
+```{r}
+#| label: discover-run
+ua <- "Mozilla/5.0 (compatible; scenario-risk-calculator)"
+
+probe_run <- function(data_year, data_month) {
+  upload <- as.Date(sprintf("%04d-%02d-01", data_year, data_month)) + 35
+  upload_year <- as.integer(format(upload, "%Y"))
+  upload_month <- as.integer(format(upload, "%m"))
+  url <- sprintf(
+    "https://viewsforecasting.org/wp-content/uploads/%04d/%02d/fatalities003_%04d_%02d_t01_cm.csv",
+    upload_year, upload_month, data_year, data_month
+  )
+  resp <- tryCatch(
+    request(url) |> req_user_agent(ua) |>
+      req_headers(Range = "bytes=0-200") |>
+      req_error(is_error = \(r) FALSE) |>
+      req_perform(),
+    error = function(e) NULL
+  )
+  if (!is.null(resp) && resp_status(resp) %in% c(200, 206)) url else NA_character_
+}
+
+today <- Sys.Date()
+candidates <- expand.grid(
+  data_year  = c(as.integer(format(today, "%Y")) - 1, as.integer(format(today, "%Y"))),
+  data_month = 1:12
+)
+# walk most-recent first
+candidates <- candidates[order(-candidates$data_year, -candidates$data_month), ]
+candidates <- candidates[candidates$data_year * 12 + candidates$data_month <=
+                         as.integer(format(today, "%Y")) * 12 + as.integer(format(today, "%m")), ]
+
+run_url <- NA_character_
+for (i in seq_len(nrow(candidates))) {
+  u <- probe_run(candidates$data_year[i], candidates$data_month[i])
+  if (!is.na(u)) { run_url <- u; data_year <- candidates$data_year[i]; data_month <- candidates$data_month[i]; break }
+}
+stopifnot(!is.na(run_url))
+cat("Using run:", run_url, "\n")
+```
+
+## Download and parse
+
+```{r}
+#| label: download
+tmp <- tempfile(fileext = ".csv")
+request(run_url) |> req_user_agent(ua) |> req_perform(path = tmp)
+views <- read_csv(tmp, show_col_types = FALSE)
+unlink(tmp)
+cat("Rows:", nrow(views), "  Countries:", length(unique(views$isoab)), "\n")
+```
+
+## Aggregate to 12-month annual probability
+
+Window = the 12 months following the data month of the run.
+
+```{r}
+#| label: aggregate
+window_start <- as.Date(sprintf("%04d-%02d-01", data_year, data_month)) + 31
+window_start <- as.Date(sprintf("%04d-%02d-01",
+                                as.integer(format(window_start, "%Y")),
+                                as.integer(format(window_start, "%m"))))
+window_months <- format(seq(window_start, by = "month", length.out = 12), "%Y-%m")
+
+views <- views |>
+  mutate(ym = sprintf("%04d-%02d", year, month),
+         main_dich = pmin(pmax(main_dich, 0), 1))  # clamp [0,1]
+
+agg <- views |>
+  filter(ym %in% window_months) |>
+  group_by(isoab, country) |>
+  summarise(
+    probability       = 1 - prod(1 - main_dich),
+    monthly_max       = max(main_dich),
+    n_months_covered  = n(),
+    .groups = "drop"
+  ) |>
+  mutate(probability = round(probability, 4),
+         monthly_max = round(monthly_max, 4))
+```
+
+## Write artifact
+
+```{r}
+#| label: write
+countries_obj <- setNames(
+  lapply(seq_len(nrow(agg)), function(i) list(
+    country          = agg$country[i],
+    probability      = agg$probability[i],
+    monthly_max      = agg$monthly_max[i],
+    n_months_covered = agg$n_months_covered[i]
+  )),
+  agg$isoab
+)
+
+out <- list(
+  as_of         = format(Sys.Date()),
+  source        = "ViEWS (Uppsala / PRIO)",
+  source_url    = "https://viewsforecasting.org",
+  run_id        = sprintf("fatalities003_%04d_%02d_t01", data_year, data_month),
+  window_start  = window_months[1],
+  window_end    = window_months[12],
+  outcome_note  = "Probability of state-based armed conflict (>=25 fatalities/month) in at least one of the next 12 months on the territory of the country. Covers only the armed-conflict component of the model outcome — not the coup or protest components.",
+  aggregation   = "one_minus_product_of_complements",
+  license       = "See https://viewsforecasting.org for current license terms (confirm before re-publishing).",
+  countries     = countries_obj
+)
+
+out_path <- "../artifacts/views_overlay.json"
+write_json(out, out_path, auto_unbox = TRUE, pretty = TRUE)
+cat("Wrote", out_path, "  (", nrow(agg), "countries )\n")
+```
+
+Also mirror into `../web/artifacts/` so GitHub Pages serves it:
+
+```{r}
+#| label: mirror
+file.copy(out_path, "../web/artifacts/views_overlay.json", overwrite = TRUE)
+```
+
+## Sanity check
+
+```{r}
+#| label: sanity
+top   <- agg |> arrange(desc(probability)) |> head(15)
+bottom <- agg |> arrange(probability) |> head(5)
+print(top, n = 15)
+print(bottom, n = 5)
+```

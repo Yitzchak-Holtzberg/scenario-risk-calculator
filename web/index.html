@@ -90,6 +90,22 @@
     .probability.recomputed .big-number { color: var(--accent); }
     .probability .scenario-note { display: none; margin-top: 16px; font-size: 13px; color: var(--accent); font-style: italic; }
     .probability.recomputed .scenario-note { display: block; }
+    .benchmark-row {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px dashed var(--border-subtle);
+      font-size: 14px;
+      color: var(--ink-muted);
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .benchmark-row .benchmark-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; font-weight: 600; color: var(--accent); }
+    .benchmark-row .benchmark-value { font-size: 18px; color: var(--ink); font-weight: 600; }
+    .benchmark-row .benchmark-meta { font-size: 12px; font-style: italic; }
+    .benchmark-row a { color: var(--ink-muted); text-decoration: underline; text-decoration-style: dotted; }
 
     .reference { margin-bottom: 48px; padding: 22px 28px; background: var(--parchment-light); border: 1px solid var(--border-subtle); border-left: 3px solid var(--accent); }
     .reference .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); font-weight: 600; margin-bottom: 10px; }
@@ -286,7 +302,7 @@
     }
 
     // ------- main app -------
-    let weights, snapshot, baseRates, calibration, hankeInflation;
+    let weights, snapshot, baseRates, calibration, hankeInflation, viewsOverlay;
     let currentISO = null;
     let scenarioOverrides = {};
     let inflationSource = 'imf';  // 'imf' (default) or 'hanke'
@@ -294,14 +310,15 @@
     async function load() {
       try {
         const base = './artifacts/';
-        const [w, s, b, c, h] = await Promise.all([
+        const [w, s, b, c, h, v] = await Promise.all([
           fetch(base + 'weights.json').then(r => r.json()),
           fetch(base + 'country_snapshot.json').then(r => r.json()),
           fetch(base + 'base_rates.json').then(r => r.json()),
           fetch(base + 'calibration.json').then(r => r.json()),
-          fetch(base + 'hanke_inflation.json').then(r => r.json()).catch(() => null)
+          fetch(base + 'hanke_inflation.json').then(r => r.json()).catch(() => null),
+          fetch(base + 'views_overlay.json').then(r => r.json()).catch(() => null)
         ]);
-        weights = w; snapshot = s; baseRates = b; calibration = c; hankeInflation = h;
+        weights = w; snapshot = s; baseRates = b; calibration = c; hankeInflation = h; viewsOverlay = v;
         render();
       } catch (e) {
         document.getElementById('root').innerHTML =
@@ -364,6 +381,12 @@
               <div class="big-number num" id="big-number">${fmt(country.predicted_probability)}</div>
               <div class="ci">90% CI: <span class="num">${fmt(country.ci_lo_90)}</span> – <span class="num">${fmt(country.ci_hi_90)}</span></div>
               <div class="scenario-note">Scenario-adjusted point estimate (CI shown for current snapshot only)</div>
+              ${viewsOverlay && viewsOverlay.countries && viewsOverlay.countries[currentISO] ? `
+                <div class="benchmark-row" title="${viewsOverlay.outcome_note || ''}">
+                  <span class="benchmark-label"><a href="${viewsOverlay.source_url}" target="_blank" rel="noopener">ViEWS</a></span>
+                  <span class="benchmark-value num">${fmt(viewsOverlay.countries[currentISO].probability)}</span>
+                  <span class="benchmark-meta">armed conflict only · ${viewsOverlay.window_start} – ${viewsOverlay.window_end} · run ${viewsOverlay.run_id.split('_').slice(1,3).join('.')}</span>
+                </div>` : ''}
             </section>
 
             <section class="reference">
@@ -690,13 +713,15 @@
         <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">Sources</h3>
         <ul style="margin-left:16px; margin-top:4px;">
           <li><strong>V-Dem v16</strong> (Coppedge et al.) — governance, civil liberties, mass-mobilization ordinal</li>
-          <li><strong>World Bank WDI</strong> — GDP growth and other economic indicators</li>
+          <li><strong>World Bank WDI</strong> — GDP growth, CPI inflation, unemployment. IMF Staff estimates backfill inflation where WDI is missing (Cuba, Venezuela, Sudan, Zimbabwe, Argentina, Lebanon, Syria); Hanke Troubled Currencies estimates are exposed as an optional toggle for those countries.</li>
           <li><strong>UNHCR Refugee Statistics</strong> — origin-side refugee + asylum-seeker counts</li>
           <li><strong>FAO Food Price Index</strong> — monthly global FFPI, averaged to annual</li>
           <li><strong>Pilster-Böhmelt</strong> via Harvard Dataverse — coup-proofing structure (effective-number of forces)</li>
           <li><strong>Mass Mobilization Project</strong> (Clark & Regan) — large-protest events 1990–2020</li>
           <li><strong>UCDP GED v25.1</strong> (Uppsala) — armed-conflict fatalities 1989–2024</li>
           <li><strong>Cline Center Coup d'État Project</strong> — coup attempts 1945–2026</li>
+          <li><strong>Fariss latent human-rights scores</strong> — loaded into the panel; not used in v0 fit (collinearity with V-Dem civil_liberties)</li>
+          <li><strong>Polity5</strong> — loaded into the panel; not used in v0 fit (collinearity with V-Dem civil_liberties)</li>
         </ul>
 
         <h3 style="font-size:15px; font-weight:600; margin-top:20px; margin-bottom:8px;">Calibration</h3>
@@ -715,7 +740,7 @@
         <ul style="margin-left:16px; margin-top:4px;">
           <li>Predict <strong>black swans</strong> — Tunisia 2011, Sri Lanka 2022 — by definition unprecedented</li>
           <li>Predict <strong>short-horizon shifts</strong> — features are annual, so we can't detect monthly escalations</li>
-          <li>Capture <strong>country-specific dynamics</strong> not in our 6 features (e.g., specific dynasty politics, religious/ethnic tensions)</li>
+          <li>Capture <strong>country-specific dynamics</strong> not in our 8 features (e.g., specific dynasty politics, religious/ethnic tensions)</li>
           <li>Be a <strong>policy recommendation</strong> — it's a probability estimate, not a prescription</li>
         </ul>
 
