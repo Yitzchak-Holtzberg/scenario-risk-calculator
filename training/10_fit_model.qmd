@@ -16,19 +16,30 @@ the variance-covariance matrix are saved so the dashboard can reproduce
 predictions *and* compute 90% CIs by sampling from `MVN(coef, vcov)`.
 
 **Features (7):**
-- `z_civil_liberties` — regime quality
-- `z_freedom_expression` — speech/media climate
+
+*Absolute-level (raw V-Dem indices)* — "where this country sits structurally":
+- `civil_liberties` — V-Dem 0–1 index
+- `freedom_expression` — V-Dem 0–1 index
+
+*Within-country z-scored* — "how stressed vs this country's own history":
 - `z_gdp_growth` — economic shock
-- `z_refugee_outflow` — population leaving (stress proxy)
-- `z_political_violence_ord` — recent violence
+- `z_refugee_outflow` — population-leaving shock
+- `z_political_violence_ord` — recent violence vs own norm
 - `z_ffpi_avg` — global food-price pressure
 - `z_coup_proof_fragmentation` — Pilster-Böhmelt effective-number of forces
 
+Z-scores are winsorized at ±3 SDs (in `08_build_panel.qmd`) so countries
+with tiny historical baselines (e.g., UK's near-zero refugee outflow) don't
+blow up when a small absolute number arrives.
+
+The hybrid (levels for structural V-Dem signals, z-scores for dynamic
+economic/conflict signals) captures both "where this country sits" and "how
+it's moving." With pure within-country z-scoring, UK and Cuba look similar
+on civil-liberties because each one's z-score is computed against its own
+baseline — the raw levels are dropped. The level features fix that.
+
 de Bruin's `counterbalancing` and `politicization` are loaded into the panel
-but excluded from the v0 fit — their coverage (110 countries through 2010
-plus forward-fill) introduces enough listwise-deletion drop that the larger
-model performs worse than the smaller one. Revisit with median imputation
-in v1.
+but excluded from the v0 fit — coverage gaps cause excessive listwise drop.
 
 **Train/test:** train on 1995–2022; predict unrest in 2023+ on holdout 2023.
 
@@ -46,9 +57,17 @@ library(duckdb)
 #| label: pull
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
 
-features <- c("z_civil_liberties", "z_freedom_expression", "z_gdp_growth",
-              "z_refugee_outflow", "z_political_violence_ord", "z_ffpi_avg",
-              "z_coup_proof_fragmentation")
+features <- c(
+  # Absolute level - structural "where this country sits"
+  # (dropped freedom_expression - too collinear with civil_liberties; the
+  # joint fit produced sign-flipped coefficients on one of them. V-Dem's
+  # core democracy indices correlate ~0.85+ cross-sectionally so we keep
+  # just one.)
+  "civil_liberties",
+  # Within-country z-scores - "how stressed vs this country's own history"
+  "z_gdp_growth", "z_refugee_outflow", "z_political_violence_ord",
+  "z_ffpi_avg", "z_coup_proof_fragmentation"
+)
 
 needed_cols <- paste(c("iso3c", "year", "regime_type", "unrest_next_year", features), collapse = ", ")
 panel <- dbGetQuery(con, sprintf("SELECT %s FROM panel_labeled", needed_cols))

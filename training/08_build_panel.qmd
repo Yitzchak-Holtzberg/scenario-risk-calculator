@@ -131,13 +131,26 @@ z_within <- function(x) {
   if (sum(!is.na(x)) < 5) return(rep(NA_real_, length(x)))
   m <- mean(x, na.rm = TRUE); s <- sd(x, na.rm = TRUE)
   if (is.na(s) || s == 0) return(rep(0, length(x)))
-  (x - m) / s
+  # Winsorize at +/-3 SDs so a country with a tiny historical baseline
+  # (e.g. UK's near-zero refugee outflow) doesn't blow up to +3.5 when a
+  # small absolute number arrives. Caps extreme outliers without changing
+  # ordering for the bulk of the distribution.
+  z <- (x - m) / s
+  pmin(pmax(z, -3), 3)
 }
+
+# Some features are heavily skewed (e.g. refugee_outflow: most countries
+# near zero, a few in the hundreds of thousands). Log-transform before
+# z-scoring so the z reflects meaningful variation across the whole range
+# rather than amplifying noise at the bottom and compressing it at the top.
+log_features <- c("refugee_outflow")
 
 panel <- raw
 for (feat in features) {
   z_col <- paste0("z_", feat)
-  panel[[z_col]] <- ave(panel[[feat]], panel$iso3c, FUN = z_within)
+  x <- panel[[feat]]
+  if (feat %in% log_features) x <- log1p(pmax(x, 0))
+  panel[[z_col]] <- ave(x, panel$iso3c, FUN = z_within)
 }
 
 # Quick sanity: a country's z-scores should average ~0 across history.

@@ -78,8 +78,7 @@ weights <- list(
   train_years   = fit$train_years,
   features      = features,
   feature_labels = as.list(c(
-    z_civil_liberties          = "Civil liberties",
-    z_freedom_expression       = "Freedom of expression",
+    civil_liberties            = "Civil liberties",
     z_gdp_growth               = "GDP growth",
     z_refugee_outflow          = "Refugee outflow",
     z_political_violence_ord   = "Political violence",
@@ -87,8 +86,7 @@ weights <- list(
     z_coup_proof_fragmentation = "Coup-proofing fragmentation"
   )),
   feature_direction = as.list(c(   # +1 = higher value raises risk, -1 = lowers
-    z_civil_liberties          = -1,
-    z_freedom_expression       = -1,
+    civil_liberties            = -1,
     z_gdp_growth               = -1,
     z_refugee_outflow          = +1,
     z_political_violence_ord   = +1,
@@ -143,8 +141,7 @@ a 90% CI by sampling 1,000 times from `MVN(coef, vcov)`.
 # Map z-scored features back to their raw counterparts so the dashboard can
 # work with intelligible values (e.g. show "GDP growth = -10.95%", not "z = -2.3").
 raw_features <- c(
-  z_civil_liberties          = "civil_liberties",
-  z_freedom_expression       = "freedom_expression",
+  civil_liberties            = "civil_liberties",
   z_gdp_growth               = "gdp_growth",
   z_refugee_outflow          = "refugee_outflow",
   z_political_violence_ord   = "political_violence_ord",
