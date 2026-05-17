@@ -80,16 +80,20 @@ weights <- list(
   feature_labels = as.list(c(
     civil_liberties            = "Civil liberties",
     z_gdp_growth               = "GDP growth",
-    z_refugee_outflow          = "Refugee outflow",
+    z_cpi_inflation            = "Inflation",
+    z_unemployment             = "Unemployment",
     z_political_violence_ord   = "Political violence",
+    z_refugee_outflow          = "Refugee outflow",
     z_ffpi_avg                 = "Global food prices",
     z_coup_proof_fragmentation = "Coup-proofing fragmentation"
   )),
   feature_direction = as.list(c(   # +1 = higher value raises risk, -1 = lowers
     civil_liberties            = -1,
     z_gdp_growth               = -1,
-    z_refugee_outflow          = +1,
+    z_cpi_inflation            = +1,
+    z_unemployment             = +1,
     z_political_violence_ord   = +1,
+    z_refugee_outflow          = +1,
     z_ffpi_avg                 = +1,
     z_coup_proof_fragmentation = -1
   )),
@@ -143,8 +147,10 @@ a 90% CI by sampling 1,000 times from `MVN(coef, vcov)`.
 raw_features <- c(
   civil_liberties            = "civil_liberties",
   z_gdp_growth               = "gdp_growth",
-  z_refugee_outflow          = "refugee_outflow",
+  z_cpi_inflation            = "cpi_inflation",
+  z_unemployment             = "unemployment",
   z_political_violence_ord   = "political_violence_ord",
+  z_refugee_outflow          = "refugee_outflow",
   z_ffpi_avg                 = "ffpi_avg",
   z_coup_proof_fragmentation = "coup_proof_fragmentation"
 )

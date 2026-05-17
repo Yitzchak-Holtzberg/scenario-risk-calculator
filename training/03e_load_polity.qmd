@@ -1,0 +1,89 @@
+---
+title: "03e — Load Polity5 democracy-autocracy scores"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Polity5 from Marshall et al. / Center for Systemic Peace. Annual democracy
+(0–10) and autocracy (0–10) scores combined into the `polity2` score
+ranging −10 (full autocracy) to +10 (full democracy). Coverage: 1800–2018.
+
+Independent of V-Dem's expert-coding methodology — useful as a cross-check
+on regime classification.
+
+Source: `https://www.systemicpeace.org/inscr/p5v2018.xls`.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(readxl)
+library(DBI)
+library(duckdb)
+library(countrycode)
+```
+
+## Download
+
+```{r}
+#| label: fetch
+dir.create("../data/raw", showWarnings = FALSE, recursive = TRUE)
+polity_local <- "../data/raw/polity5_v2018.xls"
+if (!file.exists(polity_local) || file.info(polity_local)$size < 1000) {
+  download.file("https://www.systemicpeace.org/inscr/p5v2018.xls",
+                polity_local, mode = "wb", quiet = TRUE)
+}
+```
+
+## Parse + crosswalk
+
+```{r}
+#| label: parse
+polity <- read_excel(polity_local)
+cat("Columns (first 20):\n"); print(names(polity)[1:min(20, ncol(polity))])
+cat("\nRows:", nrow(polity), " | Year range:", range(polity$year, na.rm = TRUE), "\n")
+
+polity$iso3c <- countrycode(polity$ccode, "cown", "iso3c", warn = FALSE)
+polity <- as.data.frame(polity)
+polity <- polity[!is.na(polity$iso3c), c("iso3c", "year", "polity2", "durable")]
+polity$year <- as.integer(polity$year)
+# polity2 sometimes carries -66/-77/-88 to indicate transitions/interregnum;
+# treat those as NA.
+polity$polity2[polity$polity2 < -10 | polity$polity2 > 10] <- NA
+head(polity, 3)
+```
+
+## Write to DuckDB
+
+```{r}
+#| label: write
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+dbWriteTable(con, "polity5", polity, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS rows, MIN(year) AS first_year, MAX(year) AS last_year FROM polity5")
+```
+
+## Spot check: latest polity2 distribution
+
+```{r}
+#| label: inspect
+dbGetQuery(con, "
+  SELECT iso3c, polity2, durable
+  FROM polity5
+  WHERE year = 2018 AND polity2 IS NOT NULL
+  ORDER BY polity2 ASC
+  LIMIT 10
+")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

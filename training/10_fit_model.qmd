@@ -65,15 +65,19 @@ con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
 features <- c(
   # Absolute level - structural
   "civil_liberties",
-  # Within-country z-scores - dynamics
-  "z_gdp_growth", "z_refugee_outflow", "z_political_violence_ord",
-  "z_ffpi_avg", "z_coup_proof_fragmentation"
+  # Economic stress (within-country z, region-median-imputed)
+  "z_gdp_growth", "z_cpi_inflation", "z_unemployment",
+  # Political stress
+  "z_political_violence_ord",
+  # External / structural
+  "z_refugee_outflow", "z_ffpi_avg", "z_coup_proof_fragmentation"
 )
-# v0 NOTE: tried adding z_cpi_inflation, z_unemployment, z_regime_support_locus
-# but it hurt calibration (Brier skill 0.062 -> 0.025) because countries with
-# data gaps got median-imputed values that introduced noise rather than
-# signal. Proper fix is country-specific imputation (e.g. carry-forward,
-# regional median) - deferred to v1.
+# Fariss latent HR scores AND Polity5 polity2 are loaded in the panel but
+# excluded from the v0 fit. Both measure "how democratic" on similar
+# dimensions to V-Dem civil_liberties; adding either or both produced
+# collinear sign-flip instability (skill 0.044 -> 0.007 with Fariss,
+# -> 0.000 with Fariss+Polity). v1 fix: ridge regression to keep all three
+# regime-quality signals without coefficient blow-up.
 
 needed_cols <- paste(c("iso3c", "year", "regime_type", "unrest_next_year", features), collapse = ", ")
 panel <- dbGetQuery(con, sprintf("SELECT %s FROM panel_labeled", needed_cols))

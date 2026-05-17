@@ -82,7 +82,9 @@ raw <- dbGetQuery(con, "
     f.ffpi_avg,
     pb.effectivenumber   AS coup_proof_fragmentation,
     sf.counterbalancing,
-    sf.politicization
+    sf.politicization,
+    fh.hr_score          AS fariss_hr_score,
+    pol.polity2          AS polity2
   FROM countries c
   JOIN vdem v       ON c.vdem_id    = v.country_id  AND v.year >= 1995
   LEFT JOIN wdi w   ON c.iso3c      = w.iso3c       AND v.year = w.year
@@ -90,21 +92,28 @@ raw <- dbGetQuery(con, "
   LEFT JOIN fao_annual f         ON v.year  = f.year
   LEFT JOIN pb_counterbalancing pb ON c.iso3c = pb.iso3c AND v.year = pb.year
   LEFT JOIN security_forces sf   ON c.iso3c = sf.iso3c AND v.year = sf.year
+  LEFT JOIN fariss_hr fh         ON c.iso3c = fh.iso3c AND v.year = fh.year
+  LEFT JOIN polity5 pol          ON c.iso3c = pol.iso3c AND v.year = pol.year
   WHERE c.region IS NOT NULL
   ORDER BY c.iso3c, v.year
 ")
 
-# de Bruin ends at 2010; forward-fill each country's last non-NA value
-# through 2024. Coup-proofing structure changes slowly so this is defensible.
+# Forward-fill late-ending series with the country's last non-NA value:
+# de Bruin ends 2010, Fariss ends 2021, Polity5 ends 2018. Structural
+# variables change slowly so carry-forward is defensible for v0.
 locf_within <- function(x) {
   for (i in seq_along(x)) if (is.na(x[i]) && i > 1) x[i] <- x[i - 1]
   x
 }
-for (col in c("counterbalancing", "politicization")) {
+for (col in c("counterbalancing", "politicization",
+              "fariss_hr_score", "polity2")) {
   raw[[col]] <- ave(raw[[col]], raw$iso3c, FUN = locf_within)
 }
-cat("After forward-fill: counterbalancing non-NA rows:",
-    sum(!is.na(raw$counterbalancing)), "/", nrow(raw), "\n")
+cat("After forward-fill: non-NA rows per feature:\n")
+print(c(counterbalancing  = sum(!is.na(raw$counterbalancing)),
+        fariss_hr_score   = sum(!is.na(raw$fariss_hr_score)),
+        polity2           = sum(!is.na(raw$polity2)),
+        total_rows        = nrow(raw)))
 cat("Raw panel rows:", nrow(raw), "\n")
 cat("Countries:     ", length(unique(raw$iso3c)), "\n")
 cat("Year range:    ", range(raw$year), "\n")
@@ -125,7 +134,8 @@ features <- c("civil_liberties", "freedom_expression", "regime_support_locus",
               "cpi_inflation", "gdp_growth", "gdp_per_cap",
               "trade_pct_gdp", "unemployment",
               "refugee_outflow", "ffpi_avg",
-              "coup_proof_fragmentation", "counterbalancing", "politicization")
+              "coup_proof_fragmentation", "counterbalancing", "politicization",
+              "fariss_hr_score", "polity2")
 
 z_within <- function(x) {
   if (sum(!is.na(x)) < 5) return(rep(NA_real_, length(x)))
@@ -139,12 +149,48 @@ z_within <- function(x) {
   pmin(pmax(z, -3), 3)
 }
 
+# Region-median imputation: for each (year, region), fill missing values
+# with the median of available values in that (year, region). Falls back to
+# global-median if the (year, region) cell is entirely empty. This keeps
+# countries like Cuba (which doesn't report CPI to the World Bank) in the
+# panel by giving them a plausible regional baseline rather than dropping
+# them entirely. Done BEFORE z-scoring so within-country z's reflect a
+# consistent imputed time series.
+panel <- raw
+imputation_log <- data.frame(feature = character(), n_imputed = integer())
+
+for (feat in features) {
+  na_idx <- which(is.na(panel[[feat]]))
+  if (length(na_idx) == 0) next
+
+  # Try region-median per (year, region)
+  for (i in na_idx) {
+    yr <- panel$year[i]
+    rgn <- panel$region[i]
+    pool <- panel[[feat]][panel$year == yr & panel$region == rgn]
+    pool <- pool[!is.na(pool)]
+    if (length(pool) >= 3) {
+      panel[[feat]][i] <- median(pool)
+    }
+  }
+
+  # Anything still NA: fall back to global median for that feature
+  still_na <- is.na(panel[[feat]])
+  if (any(still_na)) {
+    panel[[feat]][still_na] <- median(panel[[feat]], na.rm = TRUE)
+  }
+
+  imputation_log <- rbind(imputation_log,
+                          data.frame(feature = feat, n_imputed = length(na_idx)))
+}
+cat("Region-median imputation log:\n")
+print(imputation_log)
+
 # Some features are heavily skewed (e.g. refugee_outflow: most countries
 # near zero, a few in the hundreds of thousands). Log-transform before
 # z-scoring so the z reflects meaningful variation across the whole range.
 log_features <- c("refugee_outflow")
 
-panel <- raw
 for (feat in features) {
   z_col <- paste0("z_", feat)
   x <- panel[[feat]]

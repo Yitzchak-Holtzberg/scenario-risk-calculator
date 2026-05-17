@@ -482,10 +482,17 @@
                        "expression, movement. Higher = more free.",
       z_gdp_growth:    "Annual GDP growth from World Bank WDI. Z-scored vs this country's own " +
                        "history; negative = unusual contraction.",
+      z_cpi_inflation: "Annual CPI inflation rate (World Bank WDI). Region-median imputed where " +
+                       "countries don't report (e.g. Cuba). Z-scored within country.",
+      z_unemployment:  "Unemployment % of labor force (World Bank WDI). Z-scored within country.",
       z_refugee_outflow: "Total refugees + asylum seekers originating from this country (UNHCR). " +
                          "Log-transformed then z-scored vs country history.",
       z_political_violence_ord: "V-Dem ordinal (0–3): how much political violence occurred this year " +
                                 "relative to this country's recent history.",
+      z_fariss_hr_score: "Fariss latent human-rights score (item-response-theory model combining " +
+                         "Amnesty, State Dept, CIRI, PTS). Z-scored within country; higher = better.",
+      z_polity2:       "Polity5 score (−10 autocracy to +10 democracy). Independent of V-Dem; useful " +
+                       "cross-check. Z-scored within country.",
       z_ffpi_avg:      "FAO Food Price Index annual mean (2014–16 = 100). Z-scored — captures global " +
                        "food-price shock years (2008, 2011, 2022).",
       z_coup_proof_fragmentation: "Pilster-Böhmelt effective-number of military forces. Higher = " +
