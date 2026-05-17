@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C — Modern SaaS · Scenario Risk · Cuba</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FAFAF9;
+      --surface: #FFFFFF;
+      --surface-2: #F5F5F4;
+      --border: #E7E5E4;
+      --border-strong: #D6D3D1;
+      --text: #0F172A;
+      --text-muted: #64748B;
+      --text-soft: #94A3B8;
+      --accent: #4F46E5;
+      --accent-soft: #EEF2FF;
+      --accent-text: #4338CA;
+      --positive: #DC2626;
+      --positive-soft: #FEF2F2;
+      --negative: #059669;
+      --negative-soft: #ECFDF5;
+      --neutral: #94A3B8;
+      --neutral-soft: #F1F5F9;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 15px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    .num { font-variant-numeric: tabular-nums; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .page { max-width: 880px; margin: 0 auto; padding: 56px 32px 80px; }
+
+    /* Top nav */
+    .topnav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 40px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .brand-mark {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, var(--accent) 0%, #7C3AED 100%);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 700; font-size: 14px;
+    }
+    .top-link {
+      font-size: 14px;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+    .top-link:hover { background: var(--surface); }
+
+    /* Title + filters */
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 15px;
+      margin-bottom: 28px;
+    }
+
+    .filters {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .filter {
+      flex: 0 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 180px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .filter:hover { border-color: var(--border-strong); }
+    .filter:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .filter .lbl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .filter select {
+      font: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      padding: 0;
+      cursor: pointer;
+    }
+    .filter select:focus { outline: none; }
+    .snap {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-muted);
+      padding: 0 4px;
+    }
+    .snap-dot {
+      width: 6px; height: 6px;
+      background: var(--negative);
+      border-radius: 50%;
+    }
+
+    /* Main probability card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .prob-card { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; }
+    .prob-card .lbl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .prob-card .big {
+      font-size: 72px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .prob-card .ci-pill {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 5px 12px;
+      background: var(--surface-2);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .ci-viz { padding-left: 12px; }
+    .ci-viz .track {
+      position: relative;
+      height: 8px;
+      background: var(--surface-2);
+      border-radius: 999px;
+      margin: 22px 0 14px;
+    }
+    .ci-viz .ci-band {
+      position: absolute;
+      top: 0; height: 100%;
+      left: 11%; width: 16%;
+      background: var(--accent-soft);
+      border-radius: 999px;
+    }
+    .ci-viz .ci-fill {
+      position: absolute;
+      top: 0; height: 100%;
+      left: 0; width: 18%;
+      background: var(--accent);
+      border-radius: 999px;
+    }
+    .ci-viz .dot {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 16px; height: 16px;
+      background: var(--accent);
+      border: 3px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px var(--accent);
+      left: 18%;
+    }
+    .ci-viz .scale {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-soft);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Reference class — softer card with accent stripe */
+    .ref-card {
+      background: var(--accent-soft);
+      border: 1px solid #E0E7FF;
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin-bottom: 28px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .ref-icon {
+      flex: 0 0 32px;
+      height: 32px;
+      background: white;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .ref-card .lbl {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-text);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 2px;
+    }
+    .ref-card .body { font-size: 14px; color: var(--text); line-height: 1.55; }
+
+    /* Contributions card */
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .section-head h2 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .section-head .hint {
+      font-size: 12px;
+      color: var(--text-soft);
+    }
+
+    .contrib {
+      display: grid;
+      grid-template-columns: 240px 80px 1fr 80px;
+      gap: 14px;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .contrib:last-child { border-bottom: none; }
+    .contrib .name { font-weight: 500; }
+    .contrib .z {
+      font-variant-numeric: tabular-nums;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .contrib .bar {
+      height: 8px;
+      background: var(--surface-2);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    .contrib .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+    }
+    .contrib .pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 999px;
+      text-align: center;
+      letter-spacing: 0.02em;
+    }
+    .pill-up { background: var(--positive-soft); color: var(--positive); }
+    .pill-down { background: var(--negative-soft); color: var(--negative); }
+    .pill-neutral { background: var(--neutral-soft); color: var(--neutral); }
+    .bar-up { background: var(--positive); }
+    .bar-down { background: var(--negative); }
+    .bar-neutral { background: var(--neutral); }
+
+    /* Footer */
+    footer {
+      margin-top: 36px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    footer a {
+      color: var(--accent-text);
+      font-weight: 500;
+      text-decoration: none;
+    }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <nav class="topnav">
+      <div class="brand">
+        <div class="brand-mark">S</div>
+        <span>Scenario Risk</span>
+      </div>
+      <a href="#" class="top-link">Methodology →</a>
+    </nav>
+
+    <h1>Sustained mass unrest</h1>
+    <p class="subtitle">12-month forecast · regime-stratified logistic model</p>
+
+    <div class="filters">
+      <label class="filter">
+        <span class="lbl">Country</span>
+        <select><option>Cuba</option><option>Venezuela</option><option>Iran</option><option>Belarus</option></select>
+      </label>
+      <label class="filter">
+        <span class="lbl">Horizon</span>
+        <select><option>12 months</option></select>
+      </label>
+      <span class="snap">
+        <span class="snap-dot"></span>
+        Snapshot · April 2026
+      </span>
+    </div>
+
+    <div class="card">
+      <div class="prob-card">
+        <div>
+          <div class="lbl">Estimated probability</div>
+          <div class="big">18%</div>
+          <span class="ci-pill">90% CI · 11% – 27%</span>
+        </div>
+        <div class="ci-viz">
+          <div class="track">
+            <div class="ci-band"></div>
+            <div class="ci-fill"></div>
+            <div class="dot"></div>
+          </div>
+          <div class="scale">
+            <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ref-card">
+      <div class="ref-icon">i</div>
+      <div>
+        <div class="lbl">Reference class</div>
+        <div class="body">
+          47 closed-autocracy country-years with a comparable indicator profile,
+          training window 1990–2018. Base rate in reference class: <b class="num">9%</b>.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-head">
+        <h2>Indicator contributions</h2>
+        <span class="hint">sorted by absolute impact</span>
+      </div>
+
+      <div class="contrib">
+        <div class="name">Energy crisis</div>
+        <div class="z">+2.1</div>
+        <div class="bar"><div class="bar-fill bar-up" style="width: 84%;"></div></div>
+        <div class="pill pill-up">Raises</div>
+      </div>
+      <div class="contrib">
+        <div class="name">Food / medicine shortage</div>
+        <div class="z">+1.6</div>
+        <div class="bar"><div class="bar-fill bar-up" style="width: 64%;"></div></div>
+        <div class="pill pill-up">Raises</div>
+      </div>
+      <div class="contrib">
+        <div class="name">Economic stress</div>
+        <div class="z">+1.4</div>
+        <div class="bar"><div class="bar-fill bar-up" style="width: 56%;"></div></div>
+        <div class="pill pill-up">Raises</div>
+      </div>
+      <div class="contrib">
+        <div class="name">Emigration exit valve</div>
+        <div class="z">+1.9</div>
+        <div class="bar"><div class="bar-fill bar-down" style="width: 76%;"></div></div>
+        <div class="pill pill-down">Lowers</div>
+      </div>
+      <div class="contrib">
+        <div class="name">Security-force defection risk</div>
+        <div class="z">-0.8</div>
+        <div class="bar"><div class="bar-fill bar-down" style="width: 32%;"></div></div>
+        <div class="pill pill-down">Lowers</div>
+      </div>
+      <div class="contrib">
+        <div class="name">Elite split risk</div>
+        <div class="z">-0.3</div>
+        <div class="bar"><div class="bar-fill bar-neutral" style="width: 12%;"></div></div>
+        <div class="pill pill-neutral">Neutral</div>
+      </div>
+    </div>
+
+    <footer>
+      <span class="badge">● unrest-risk-v0.1</span>
+      <a href="#">View full methodology →</a>
+    </footer>
+
+  </div>
+</body>
+</html>

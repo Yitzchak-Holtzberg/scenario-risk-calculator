@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scenario Risk Calculator — Cuba</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --parchment: #F8F3E8;
+      --parchment-light: #FFFCF5;
+      --ink: #2A2620;
+      --ink-muted: #6B5D4F;
+      --border: #D8CFC0;
+      --border-subtle: #E8E0CF;
+      --accent: #1F3A60;
+      --positive: #8B3A2B;
+      --negative: #2E5D3F;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--parchment);
+      color: var(--ink);
+      font-family: 'Source Serif 4', Charter, 'Times New Roman', serif;
+      font-size: 17px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 80px 40px 100px;
+    }
+    .num { font-variant-numeric: tabular-nums; }
+    .mono { font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace; }
+
+    /* Header */
+    header {
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 24px;
+      margin-bottom: 48px;
+    }
+    h1 {
+      font-size: 30px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .subtitle {
+      color: var(--ink-muted);
+      font-size: 16px;
+      font-style: italic;
+      margin-top: 6px;
+    }
+
+    /* Meta row */
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+    .meta-item .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--ink-muted);
+      font-weight: 600;
+    }
+    .meta-item .value {
+      font-size: 19px;
+      margin-top: 6px;
+    }
+    select {
+      font-family: inherit;
+      font-size: 19px;
+      background: transparent;
+      border: none;
+      border-bottom: 1px dashed var(--ink);
+      color: var(--ink);
+      padding: 0 24px 2px 0;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    select:focus { outline: none; border-bottom-color: var(--accent); border-bottom-style: solid; }
+
+    .divider {
+      border-top: 1px solid var(--border-subtle);
+      margin: 32px 0 0;
+    }
+
+    /* Probability hero */
+    .probability {
+      text-align: center;
+      padding: 56px 0;
+      margin: 16px 0 48px;
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .probability .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      color: var(--ink-muted);
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+    .probability .big-number {
+      font-size: 104px;
+      font-weight: 600;
+      line-height: 1;
+      letter-spacing: -0.025em;
+      color: var(--ink);
+    }
+    .probability .ci {
+      margin-top: 24px;
+      font-size: 17px;
+      font-style: italic;
+      color: var(--ink-muted);
+    }
+
+    /* Reference class */
+    .reference {
+      margin-bottom: 56px;
+      padding: 22px 28px;
+      background: var(--parchment-light);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--accent);
+    }
+    .reference .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .reference p {
+      font-size: 16px;
+      color: var(--ink);
+      line-height: 1.6;
+    }
+
+    /* Contributions */
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      color: var(--ink-muted);
+      font-weight: 600;
+      margin-bottom: 18px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 64px;
+    }
+    th, td {
+      padding: 14px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    th {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--ink-muted);
+      border-bottom: 1px solid var(--ink);
+    }
+    td.indicator { width: 50%; }
+    td.z-score {
+      width: 20%;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      letter-spacing: -0.01em;
+    }
+    td.direction {
+      width: 30%;
+      text-align: right;
+      font-style: italic;
+      color: var(--ink-muted);
+    }
+    .direction-up { color: var(--positive); }
+    .direction-down { color: var(--negative); }
+    .arrow { display: inline-block; width: 14px; margin-right: 6px; font-style: normal; }
+
+    /* Footer */
+    footer {
+      padding-top: 32px;
+      border-top: 1px solid var(--border-subtle);
+      font-size: 14px;
+      color: var(--ink-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    footer a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 4px;
+      font-style: italic;
+    }
+    footer a:hover { text-decoration-style: solid; }
+    .version { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header>
+      <h1>Scenario Risk Calculator</h1>
+      <p class="subtitle">Sustained mass unrest — 12-month horizon</p>
+    </header>
+
+    <div class="meta">
+      <div class="meta-item">
+        <div class="label">Country</div>
+        <select>
+          <option>Cuba</option>
+          <option>Venezuela</option>
+          <option>Iran</option>
+          <option>Belarus</option>
+          <option>Nicaragua</option>
+        </select>
+      </div>
+      <div class="meta-item" style="text-align: right;">
+        <div class="label">Snapshot</div>
+        <div class="value">April 2026</div>
+      </div>
+    </div>
+
+    <section class="probability">
+      <div class="label">Estimated probability</div>
+      <div class="big-number num">18%</div>
+      <div class="ci">90% CI: <span class="num">11%</span> – <span class="num">27%</span></div>
+    </section>
+
+    <section class="reference">
+      <div class="label">Reference class</div>
+      <p>
+        Based on <span class="num">47</span> closed-autocracy country-years with a
+        comparable indicator profile, training window <span class="num">1990–2018</span>.
+        Base rate in reference class: <span class="num">9%</span>.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="section-title">Indicator contributions</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Indicator</th>
+            <th style="text-align: right;">Z-score</th>
+            <th style="text-align: right;">Direction</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="indicator">Energy crisis</td>
+            <td class="z-score">+2.1</td>
+            <td class="direction direction-up"><span class="arrow">▲</span>raises</td>
+          </tr>
+          <tr>
+            <td class="indicator">Food / medicine shortage</td>
+            <td class="z-score">+1.6</td>
+            <td class="direction direction-up"><span class="arrow">▲</span>raises</td>
+          </tr>
+          <tr>
+            <td class="indicator">Economic stress</td>
+            <td class="z-score">+1.4</td>
+            <td class="direction direction-up"><span class="arrow">▲</span>raises</td>
+          </tr>
+          <tr>
+            <td class="indicator">Emigration exit valve</td>
+            <td class="z-score">+1.9</td>
+            <td class="direction direction-down"><span class="arrow">▼</span>lowers</td>
+          </tr>
+          <tr>
+            <td class="indicator">Elite split risk</td>
+            <td class="z-score">-0.3</td>
+            <td class="direction"><span class="arrow">·</span>neutral</td>
+          </tr>
+          <tr>
+            <td class="indicator">Security-force defection risk</td>
+            <td class="z-score">-0.8</td>
+            <td class="direction direction-down"><span class="arrow">▼</span>lowers</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <footer>
+      <span class="version">unrest-risk-v0.1 · trained 2026-04-15</span>
+      <a href="#">View full methodology →</a>
+    </footer>
+
+  </div>
+</body>
+</html>

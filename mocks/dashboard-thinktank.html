@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A — Think-tank · Scenario Risk · Cuba</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,ital,wght@8..60,0,400;8..60,0,500;8..60,0,600;8..60,0,700;8..60,1,400;8..60,1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --parchment: #F8F3E8;
+      --ink: #2A2620;
+      --ink-muted: #6B5D4F;
+      --border: #B5A98F;
+      --border-subtle: #D8CFC0;
+      --accent: #5B2333;
+      --positive: #8B3A2B;
+      --negative: #2E5D3F;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--parchment);
+      color: var(--ink);
+      font-family: 'Source Serif 4', Charter, 'Times New Roman', serif;
+      font-size: 17px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 700px; margin: 0 auto; padding: 80px 40px 100px; }
+    .num { font-variant-numeric: tabular-nums; }
+
+    /* Masthead — newspaper / bulletin style */
+    .masthead {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-top: 3px double var(--ink);
+      border-bottom: 1px solid var(--ink);
+      padding: 14px 0 12px;
+      margin-bottom: 8px;
+    }
+    .masthead .pub {
+      font-variant: small-caps;
+      letter-spacing: 0.12em;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .masthead .date {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--ink-muted);
+    }
+    .vol {
+      font-size: 12px;
+      color: var(--ink-muted);
+      font-style: italic;
+      text-align: center;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    h1 {
+      font-size: 34px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      text-align: center;
+      margin-top: 48px;
+      line-height: 1.15;
+    }
+    .deck {
+      text-align: center;
+      font-style: italic;
+      color: var(--ink-muted);
+      font-size: 17px;
+      margin-top: 12px;
+      margin-bottom: 56px;
+    }
+
+    .byline {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 14px;
+      padding: 10px 0;
+      border-top: 1px solid var(--ink);
+      border-bottom: 1px solid var(--ink);
+      margin-bottom: 48px;
+    }
+    .byline .label {
+      font-variant: small-caps;
+      letter-spacing: 0.1em;
+      color: var(--ink-muted);
+      margin-right: 8px;
+    }
+    .byline select {
+      font: inherit;
+      background: transparent;
+      border: none;
+      border-bottom: 1px dotted var(--ink);
+      color: var(--ink);
+      padding: 0 18px 1px 0;
+      cursor: pointer;
+    }
+
+    /* Hero — no card, just centered prose */
+    .hero {
+      text-align: center;
+      padding: 24px 0 48px;
+    }
+    .hero .label {
+      font-size: 12px;
+      font-variant: small-caps;
+      letter-spacing: 0.22em;
+      color: var(--ink-muted);
+      margin-bottom: 12px;
+    }
+    .hero .big-number {
+      font-size: 84px;
+      font-weight: 600;
+      line-height: 1;
+      letter-spacing: -0.025em;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+    .hero .ci {
+      margin-top: 16px;
+      font-size: 16px;
+      font-style: italic;
+      color: var(--ink-muted);
+    }
+    .hero-rule {
+      width: 80px;
+      border: none;
+      border-top: 1px solid var(--ink);
+      margin: 32px auto 0;
+    }
+
+    /* Reference class — flowing prose, no box */
+    .reference-block {
+      margin: 56px 0;
+      padding: 0 24px;
+      border-left: 3px solid var(--accent);
+    }
+    .reference-block .label {
+      font-size: 12px;
+      font-variant: small-caps;
+      letter-spacing: 0.18em;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .reference-block p {
+      font-size: 16px;
+      line-height: 1.65;
+    }
+
+    /* Contributions — no card, just a clean classical table */
+    .section-rule {
+      text-align: center;
+      margin: 64px 0 32px;
+      color: var(--ink-muted);
+      font-variant: small-caps;
+      letter-spacing: 0.3em;
+      font-size: 11px;
+      position: relative;
+    }
+    .section-rule::before, .section-rule::after {
+      content: '';
+      display: inline-block;
+      width: 80px;
+      height: 1px;
+      background: var(--border);
+      vertical-align: middle;
+      margin: 0 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 32px;
+    }
+    th, td { padding: 12px 8px; text-align: left; }
+    thead tr { border-bottom: 1px solid var(--ink); }
+    tbody tr { border-bottom: 1px dotted var(--border-subtle); }
+    tbody tr:last-child { border-bottom: 1px solid var(--ink); }
+    th {
+      font-size: 11px;
+      font-weight: 600;
+      font-variant: small-caps;
+      letter-spacing: 0.12em;
+      color: var(--ink-muted);
+    }
+    td.indicator { width: 52%; }
+    td.z-score {
+      width: 18%;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+    }
+    td.direction {
+      width: 30%;
+      text-align: right;
+      font-style: italic;
+      color: var(--ink-muted);
+    }
+    .direction-up { color: var(--positive); }
+    .direction-down { color: var(--negative); }
+    .arrow { display: inline-block; width: 14px; margin-right: 6px; font-style: normal; }
+
+    /* Colophon-style footer */
+    footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 3px double var(--ink);
+      font-size: 13px;
+      color: var(--ink-muted);
+      text-align: center;
+      font-style: italic;
+    }
+    footer .version {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      font-style: normal;
+      font-size: 11px;
+      margin-top: 8px;
+    }
+    footer a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <div class="masthead">
+      <span class="pub">Scenario Risk Bulletin</span>
+      <span class="date">15 May 2026</span>
+    </div>
+    <div class="vol">Vol. 0 · No. 1 · A research artifact</div>
+
+    <h1>Sustained mass unrest, twelve-month outlook</h1>
+    <p class="deck">A regime-stratified indicator-weighted forecast</p>
+
+    <div class="byline">
+      <span><span class="label">Subject:</span>
+        <select><option>Cuba</option><option>Venezuela</option><option>Iran</option><option>Belarus</option></select>
+      </span>
+      <span><span class="label">Snapshot:</span> April 2026</span>
+    </div>
+
+    <section class="hero">
+      <div class="label">Estimated probability</div>
+      <div class="big-number">18%</div>
+      <div class="ci">with a 90 percent confidence interval of 11% – 27%</div>
+      <hr class="hero-rule" />
+    </section>
+
+    <div class="reference-block">
+      <div class="label">Reference class</div>
+      <p>
+        Forty-seven closed-autocracy country-years with a comparable indicator
+        profile were observed during the training window 1990–2018. The base
+        rate of qualifying events in that reference class was nine percent.
+      </p>
+    </div>
+
+    <div class="section-rule">Indicator contributions</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Indicator</th>
+          <th style="text-align: right;">Z</th>
+          <th style="text-align: right;">Direction</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="indicator">Energy crisis</td><td class="z-score">+2.1</td><td class="direction direction-up"><span class="arrow">▲</span>raises</td></tr>
+        <tr><td class="indicator">Food / medicine shortage</td><td class="z-score">+1.6</td><td class="direction direction-up"><span class="arrow">▲</span>raises</td></tr>
+        <tr><td class="indicator">Economic stress</td><td class="z-score">+1.4</td><td class="direction direction-up"><span class="arrow">▲</span>raises</td></tr>
+        <tr><td class="indicator">Emigration exit valve</td><td class="z-score">+1.9</td><td class="direction direction-down"><span class="arrow">▼</span>lowers</td></tr>
+        <tr><td class="indicator">Elite split risk</td><td class="z-score">-0.3</td><td class="direction"><span class="arrow">·</span>neutral</td></tr>
+        <tr><td class="indicator">Security-force defection risk</td><td class="z-score">-0.8</td><td class="direction direction-down"><span class="arrow">▼</span>lowers</td></tr>
+      </tbody>
+    </table>
+
+    <footer>
+      <em>Methodology, sources, and calibration metrics —</em> <a href="#">read the full model card</a>.
+      <span class="version">unrest-risk-v0.1 · trained 2026-04-15</span>
+    </footer>
+
+  </div>
+</body>
+</html>

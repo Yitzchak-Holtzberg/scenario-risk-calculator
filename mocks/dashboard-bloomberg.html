@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>B — Bloomberg · Scenario Risk · CUB</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #000000;
+      --bg-alt: #0a0a0a;
+      --amber: #FFB000;
+      --amber-bright: #FFC830;
+      --amber-dim: #8B6914;
+      --green: #00E676;
+      --red: #FF453A;
+      --grey: #555555;
+      --border: #2a2a1a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg);
+      color: var(--amber);
+      font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: 0.01em;
+    }
+    .terminal {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 14px 18px 24px;
+    }
+    .num { font-variant-numeric: tabular-nums; }
+    .dim { color: var(--amber-dim); }
+    .bright { color: var(--amber-bright); }
+    .green { color: var(--green); }
+    .red { color: var(--red); }
+    .grey { color: var(--grey); }
+
+    /* Top ticker / status bar */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+    }
+    .topbar .left, .topbar .right { display: flex; gap: 18px; }
+    .pulse {
+      display: inline-block;
+      width: 8px; height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-right: 4px;
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    /* Panel chrome with box-drawing */
+    .panel {
+      border: 1px solid var(--amber-dim);
+      margin-bottom: 14px;
+    }
+    .panel-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 12px;
+      border-bottom: 1px solid var(--amber-dim);
+      background: var(--bg-alt);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .panel-title .right { color: var(--amber-dim); font-weight: 400; }
+    .panel-body { padding: 12px 14px; }
+
+    /* Identity strip */
+    .ident {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+    .ident .field .lbl {
+      font-size: 10px;
+      color: var(--amber-dim);
+      letter-spacing: 0.05em;
+    }
+    .ident .field .val {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--amber-bright);
+      margin-top: 2px;
+    }
+    .ident select {
+      font: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      background: transparent;
+      border: none;
+      color: var(--amber-bright);
+      padding: 0;
+      cursor: pointer;
+      margin-top: 2px;
+    }
+    .ident select:focus { outline: 1px solid var(--amber); outline-offset: 2px; }
+
+    /* Probability block */
+    .prob {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      gap: 24px;
+      align-items: center;
+    }
+    .prob .big {
+      font-size: 56px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--amber-bright);
+      line-height: 1;
+    }
+    .prob .stat-row {
+      display: flex;
+      gap: 22px;
+      font-size: 12px;
+      margin-top: 12px;
+    }
+    .prob .stat .lbl { color: var(--amber-dim); }
+    .prob .stat .val { color: var(--amber); font-weight: 500; }
+    .meter {
+      width: 100%;
+      height: 8px;
+      background: var(--bg-alt);
+      border: 1px solid var(--amber-dim);
+      position: relative;
+      margin-top: 4px;
+    }
+    .meter-fill {
+      height: 100%;
+      width: 18.3%;
+      background: var(--amber);
+      box-shadow: 0 0 6px var(--amber);
+    }
+    .meter-ci {
+      position: absolute;
+      top: -3px;
+      height: 14px;
+      border-left: 1px solid var(--amber-bright);
+      border-right: 1px solid var(--amber-bright);
+      background: rgba(255,176,0,0.1);
+      left: 11.4%;
+      width: 15.7%;
+    }
+    .meter-axis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--amber-dim);
+      margin-top: 4px;
+    }
+
+    /* Contributions table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    thead th {
+      text-align: left;
+      padding: 4px 8px;
+      color: var(--amber-dim);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 10px;
+      border-bottom: 1px dashed var(--amber-dim);
+    }
+    tbody td { padding: 4px 8px; }
+    tbody tr:hover { background: var(--bg-alt); }
+    .key { color: var(--amber); }
+    .num-cell { text-align: right; font-variant-numeric: tabular-nums; }
+    .pos { color: var(--red); }
+    .neg { color: var(--green); }
+    .neut { color: var(--grey); }
+
+    .total-row {
+      border-top: 1px solid var(--amber-dim);
+      font-weight: 600;
+      color: var(--amber-bright);
+    }
+    .total-row td { padding-top: 6px; }
+
+    /* Function key footer */
+    .fkeys {
+      display: flex;
+      gap: 18px;
+      margin-top: 16px;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      background: var(--bg-alt);
+      font-size: 11px;
+    }
+    .fk { color: var(--amber-bright); font-weight: 600; }
+    .fkeys .item { color: var(--amber-dim); }
+  </style>
+</head>
+<body>
+  <div class="terminal">
+
+    <div class="topbar">
+      <div class="left">
+        <span><span class="pulse"></span><span class="bright">LIVE</span></span>
+        <span class="dim">SCENARIO_RISK_TERMINAL · v0.1</span>
+        <span class="dim">REGION_FOCUS: AUTOCRATIC</span>
+      </div>
+      <div class="right">
+        <span class="dim">2026-05-15 14:32:09 UTC</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <span>◆ IDENTITY</span>
+        <span class="right">unrest-risk-v0.1 · trained 2026-04-15</span>
+      </div>
+      <div class="panel-body">
+        <div class="ident">
+          <div class="field">
+            <div class="lbl">COUNTRY</div>
+            <select><option>CUB / Cuba</option><option>VEN / Venezuela</option><option>IRN / Iran</option><option>BLR / Belarus</option></select>
+          </div>
+          <div class="field"><div class="lbl">EVENT</div><div class="val">SUSTAINED_UNREST</div></div>
+          <div class="field"><div class="lbl">HORIZON</div><div class="val">12M</div></div>
+          <div class="field"><div class="lbl">SNAPSHOT</div><div class="val">2026-04</div></div>
+          <div class="field"><div class="lbl">REGIME</div><div class="val">CLOSED_AUTO</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <span>◆ FORECAST</span>
+        <span class="right">SIGMOID(logit(base) + Σ β·z)</span>
+      </div>
+      <div class="panel-body">
+        <div class="prob">
+          <div>
+            <div class="big num">18.3<span class="dim" style="font-size: 32px;">%</span></div>
+            <div class="stat-row">
+              <div class="stat"><span class="lbl">CI90</span> <span class="val num">11.4–27.1%</span></div>
+              <div class="stat"><span class="lbl">REF_N</span> <span class="val num">47</span></div>
+              <div class="stat"><span class="lbl">BASE</span> <span class="val num">9.1%</span></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size: 10px; color: var(--amber-dim); margin-bottom: 4px;">PROBABILITY DISTRIBUTION (point + 90% CI)</div>
+            <div class="meter">
+              <div class="meter-fill"></div>
+              <div class="meter-ci"></div>
+            </div>
+            <div class="meter-axis"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <span>◆ INDICATOR CONTRIBUTIONS</span>
+        <span class="right">sorted by |log_odds|</span>
+      </div>
+      <div class="panel-body">
+        <table>
+          <thead>
+            <tr>
+              <th>KEY</th>
+              <th class="num-cell">Z</th>
+              <th class="num-cell">W</th>
+              <th class="num-cell">LOG_ODDS</th>
+              <th class="num-cell">DIR</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="key">z_energyCrisis</td><td class="num-cell">+2.10</td><td class="num-cell">0.220</td><td class="num-cell pos">+0.462</td><td class="num-cell pos">UP</td></tr>
+            <tr><td class="key">z_foodMedicineShortage</td><td class="num-cell">+1.60</td><td class="num-cell">0.180</td><td class="num-cell pos">+0.288</td><td class="num-cell pos">UP</td></tr>
+            <tr><td class="key">z_economicStress</td><td class="num-cell">+1.40</td><td class="num-cell">0.190</td><td class="num-cell pos">+0.266</td><td class="num-cell pos">UP</td></tr>
+            <tr><td class="key">z_emigrationExitValve</td><td class="num-cell">+1.90</td><td class="num-cell">-0.120</td><td class="num-cell neg">-0.228</td><td class="num-cell neg">DN</td></tr>
+            <tr><td class="key">z_securityForceDefection</td><td class="num-cell">-0.80</td><td class="num-cell">-0.180</td><td class="num-cell pos">+0.144</td><td class="num-cell pos">UP</td></tr>
+            <tr><td class="key">z_eliteSplitRisk</td><td class="num-cell">-0.30</td><td class="num-cell">0.310</td><td class="num-cell neg">-0.093</td><td class="num-cell neut">·</td></tr>
+            <tr class="total-row">
+              <td>Σ LOG_ODDS</td>
+              <td colspan="2"></td>
+              <td class="num-cell">+0.839</td>
+              <td class="num-cell">→ 18.3%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="fkeys">
+      <span class="item"><span class="fk">F1</span> METHODOLOGY</span>
+      <span class="item"><span class="fk">F2</span> EXPORT</span>
+      <span class="item"><span class="fk">F3</span> CYCLE_COUNTRY</span>
+      <span class="item"><span class="fk">F4</span> SENSITIVITY</span>
+      <span class="item"><span class="fk">F12</span> HELP</span>
+    </div>
+
+  </div>
+</body>
+</html>
