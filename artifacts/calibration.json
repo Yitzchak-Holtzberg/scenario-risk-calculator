@@ -1,0 +1,16 @@
+{
+  "model_version": "unrest-risk-v0.1",
+  "holdout_year": 2023,
+  "n_holdout": 158,
+  "brier": 0.0969,
+  "brier_baseline": 0.096,
+  "brier_skill_score": -0.0095,
+  "log_loss": 0.3423,
+  "base_rate": 0.1076,
+  "reliability": {
+    "bin_centers": [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95],
+    "predicted": [0.0751, 0.1406, 0.2258, 0.3197],
+    "actual": [0.0794, 0.1266, 0.0667, 1],
+    "n": [63, 79, 15, 1]
+  }
+}

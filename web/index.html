@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scenario Risk Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --parchment: #F8F3E8;
+      --parchment-light: #FFFCF5;
+      --ink: #2A2620;
+      --ink-muted: #6B5D4F;
+      --border: #D8CFC0;
+      --border-subtle: #E8E0CF;
+      --accent: #1F3A60;
+      --positive: #8B3A2B;
+      --negative: #2E5D3F;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--parchment);
+      color: var(--ink);
+      font-family: 'Source Serif 4', Charter, 'Times New Roman', serif;
+      font-size: 17px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 760px; margin: 0 auto; padding: 80px 40px 100px; }
+    .num { font-variant-numeric: tabular-nums; }
+    .mono { font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace; }
+
+    header { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 48px; }
+    h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; }
+    .subtitle { color: var(--ink-muted); font-size: 16px; font-style: italic; margin-top: 6px; }
+
+    .meta { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+    .meta-item .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-muted); font-weight: 600; }
+    .meta-item .value { font-size: 19px; margin-top: 6px; }
+    /* Custom country picker - replaces native <select> for nicer UX */
+    .picker { position: relative; margin-top: 6px; }
+    .picker-button {
+      font-family: inherit; font-size: 19px; background: transparent; border: none;
+      border-bottom: 1px dashed var(--ink); color: var(--ink);
+      padding: 0 24px 2px 0; cursor: pointer; text-align: left; width: 100%; min-width: 220px;
+    }
+    .picker-button::after { content: '▾'; position: absolute; right: 4px; top: 2px; color: var(--ink-muted); font-size: 13px; }
+    .picker-button:focus, .picker.open .picker-button { outline: none; border-bottom-color: var(--accent); border-bottom-style: solid; }
+    .picker-panel {
+      position: absolute; top: 100%; left: 0; right: 0; min-width: 280px; z-index: 50;
+      background: var(--parchment-light); border: 1px solid var(--border);
+      box-shadow: 0 8px 24px rgba(42, 38, 32, 0.12);
+      margin-top: 4px; display: none;
+    }
+    .picker.open .picker-panel { display: block; }
+    .picker-search {
+      width: 100%; padding: 12px 14px; font-family: inherit; font-size: 15px;
+      background: transparent; border: none; border-bottom: 1px solid var(--border-subtle);
+      color: var(--ink); outline: none;
+    }
+    .picker-search::placeholder { color: var(--ink-muted); font-style: italic; }
+    .picker-list { max-height: 320px; overflow-y: auto; }
+    .picker-item {
+      padding: 9px 14px; cursor: pointer; font-size: 16px; color: var(--ink);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .picker-item:hover, .picker-item.active { background: var(--parchment); color: var(--accent); }
+    .picker-item:last-child { border-bottom: none; }
+    .picker-empty { padding: 16px; text-align: center; color: var(--ink-muted); font-style: italic; font-size: 14px; }
+
+    .probability { text-align: center; padding: 56px 0; margin: 32px 0 48px; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
+    .probability .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--ink-muted); font-weight: 600; margin-bottom: 24px; }
+    .probability .big-number { font-size: 104px; font-weight: 600; line-height: 1; letter-spacing: -0.025em; color: var(--ink); }
+    .probability .ci { margin-top: 24px; font-size: 17px; font-style: italic; color: var(--ink-muted); }
+    .probability.recomputed .big-number { color: var(--accent); }
+    .probability .scenario-note { display: none; margin-top: 16px; font-size: 13px; color: var(--accent); font-style: italic; }
+    .probability.recomputed .scenario-note { display: block; }
+
+    .reference { margin-bottom: 48px; padding: 22px 28px; background: var(--parchment-light); border: 1px solid var(--border-subtle); border-left: 3px solid var(--accent); }
+    .reference .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); font-weight: 600; margin-bottom: 10px; }
+
+    .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--ink-muted); font-weight: 600; margin-bottom: 18px; padding-bottom: 10px; border-bottom: 1px solid var(--border-subtle); }
+
+    /* Indicator rows with inline slider */
+    .indicator-row {
+      display: grid;
+      grid-template-columns: 1fr 90px 110px;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .indicator-row .name { font-size: 16px; }
+    .indicator-row .z { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink-muted); }
+    .indicator-row .direction { text-align: right; font-style: italic; font-size: 14px; color: var(--ink-muted); }
+    .direction-up   { color: var(--positive); }
+    .direction-down { color: var(--negative); }
+    .arrow { display: inline-block; width: 14px; margin-right: 6px; font-style: normal; }
+
+    .slider-row { padding: 0 0 16px 0; }
+    .slider-row .slider-label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--ink-muted); margin-bottom: 6px; }
+    .slider-row .slider-label .raw { font-family: 'JetBrains Mono', monospace; color: var(--ink); }
+    .slider-row input[type=range] { width: 100%; accent-color: var(--accent); }
+    .slider-row .label-flex { display: flex; gap: 12px; align-items: center; }
+
+    .reset-btn { font-family: inherit; font-size: 13px; color: var(--accent); background: none; border: 1px solid var(--accent); padding: 6px 14px; cursor: pointer; font-style: italic; border-radius: 3px; }
+    .reset-btn:hover { background: var(--accent); color: var(--parchment); }
+
+    .actions { display: flex; justify-content: flex-end; margin-bottom: 24px; }
+
+    footer { margin-top: 64px; padding-top: 32px; border-top: 1px solid var(--border-subtle); font-size: 14px; color: var(--ink-muted); display: flex; justify-content: space-between; align-items: center; }
+    .version { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+    .loading { text-align: center; padding: 80px 0; color: var(--ink-muted); font-style: italic; }
+    .error { color: var(--positive); padding: 24px; border: 1px solid var(--positive); background: #FFF5F0; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header>
+      <h1>Scenario Risk Calculator</h1>
+      <p class="subtitle">Sustained mass unrest — 12-month horizon</p>
+    </header>
+
+    <div id="root">
+      <div class="loading">Loading frozen artifacts…</div>
+    </div>
+
+    <footer>
+      <span id="version" class="version"></span>
+      <a href="#" onclick="document.getElementById('methodology').open=true; return false;">Methodology →</a>
+    </footer>
+
+    <details id="methodology" style="margin-top:24px;">
+      <summary class="section-title" style="cursor:pointer;">Methodology (v0)</summary>
+      <div style="padding:16px 0; font-size:15px; line-height:1.7; color: var(--ink);" id="methodology-body">
+        Loading…
+      </div>
+    </details>
+
+  </div>
+
+  <script>
+    // ------- helpers -------
+    const sigmoid = x => 1 / (1 + Math.exp(-x));
+    const fmt = (p, digits=1) => (p * 100).toFixed(digits) + '%';
+    const sign = z => z > 0.05 ? '+' : z < -0.05 ? '' : '';
+
+    function scoreLinear(coefs, featureOrder, zValues) {
+      let lp = coefs['(Intercept)'] || coefs.Intercept || 0;
+      for (const f of featureOrder) {
+        if (f === '(Intercept)' || f === 'Intercept') continue;
+        lp += (coefs[f] || 0) * (zValues[f] || 0);
+      }
+      return sigmoid(lp);
+    }
+
+    // ------- main app -------
+    let weights, snapshot, baseRates, calibration;
+    let currentISO = null;
+    let scenarioOverrides = {};
+
+    async function load() {
+      try {
+        const base = './artifacts/';
+        const [w, s, b, c] = await Promise.all([
+          fetch(base + 'weights.json').then(r => r.json()),
+          fetch(base + 'country_snapshot.json').then(r => r.json()),
+          fetch(base + 'base_rates.json').then(r => r.json()),
+          fetch(base + 'calibration.json').then(r => r.json())
+        ]);
+        weights = w; snapshot = s; baseRates = b; calibration = c;
+        render();
+      } catch (e) {
+        document.getElementById('root').innerHTML =
+          '<div class="error"><strong>Couldn\'t load artifacts.</strong> Serve this from a local web server '
+          + '(e.g. <code>cd web && python -m http.server 8080</code> then open <code>http://localhost:8080</code>). '
+          + 'Browsers block <code>fetch()</code> on <code>file://</code> URLs.<br><br>'
+          + 'Underlying error: ' + e.message + '</div>';
+      }
+    }
+
+    function render() {
+      const root = document.getElementById('root');
+      const countries = Object.values(snapshot.countries).sort((a, b) => a.name.localeCompare(b.name));
+      if (!currentISO) currentISO = 'CUB';
+      const country = snapshot.countries[currentISO];
+
+      root.innerHTML = `
+        <div class="meta">
+          <div class="meta-item">
+            <div class="label">Country</div>
+            <div class="picker" id="country-picker">
+              <button class="picker-button" type="button" id="picker-button">${country.name}</button>
+              <div class="picker-panel">
+                <input class="picker-search" id="picker-search" type="text" placeholder="Type to filter…" autocomplete="off" />
+                <div class="picker-list" id="picker-list"></div>
+              </div>
+            </div>
+          </div>
+          <div class="meta-item" style="text-align: right;">
+            <div class="label">Forecast year</div>
+            <div class="value num">${country.snapshot_year + 1}</div>
+            <div style="font-size: 11px; color: var(--ink-muted); font-style: italic; margin-top: 2px;">
+              based on data through ${country.snapshot_year}
+            </div>
+          </div>
+        </div>
+
+        <section class="probability" id="prob-section">
+          <div class="label">Probability of mass unrest, next 12 months</div>
+          <div class="big-number num" id="big-number">${fmt(country.predicted_probability)}</div>
+          <div class="ci">90% CI: <span class="num">${fmt(country.ci_lo_90)}</span> – <span class="num">${fmt(country.ci_hi_90)}</span></div>
+          <div class="scenario-note">Scenario-adjusted point estimate (CI shown for current snapshot only)</div>
+        </section>
+
+        <section class="reference">
+          <div class="label">Reference class</div>
+          <p id="reference-body"></p>
+        </section>
+
+        <section>
+          <h2 class="section-title">Indicator contributions</h2>
+          <div id="indicators"></div>
+        </section>
+
+        <section style="margin-top:48px;">
+          <div style="display:flex; justify-content:space-between; align-items:baseline;">
+            <h2 class="section-title" style="border-bottom:none; padding-bottom:0;">Scenario sliders</h2>
+            <button class="reset-btn" id="reset-btn">Reset to current values</button>
+          </div>
+          <p style="font-size:14px; color:var(--ink-muted); margin-bottom:24px; font-style:italic;">
+            Adjust any indicator to see how the probability shifts.
+          </p>
+          <div id="sliders"></div>
+        </section>
+      `;
+
+      // Custom country picker with typeahead
+      setupPicker(countries);
+
+      renderReference(country);
+      renderIndicators(country);
+      renderSliders(country);
+      document.getElementById('reset-btn').addEventListener('click', () => {
+        scenarioOverrides = {};
+        render();
+      });
+      document.getElementById('version').textContent =
+        weights.model_version + ' · fitted ' + weights.fitted_at;
+      document.getElementById('methodology-body').innerHTML = methodologyHtml();
+    }
+
+    function setupPicker(countries) {
+      const picker = document.getElementById('country-picker');
+      const button = document.getElementById('picker-button');
+      const search = document.getElementById('picker-search');
+      const list   = document.getElementById('picker-list');
+
+      function renderList(query) {
+        const q = (query || '').toLowerCase().trim();
+        const filtered = q
+          ? countries.filter(c => c.name.toLowerCase().includes(q) || c.iso3c.toLowerCase().includes(q))
+          : countries;
+        if (filtered.length === 0) {
+          list.innerHTML = '<div class="picker-empty">No matches</div>';
+          return;
+        }
+        list.innerHTML = filtered.slice(0, 200).map(c =>
+          `<div class="picker-item${c.iso3c === currentISO ? ' active' : ''}" data-iso="${c.iso3c}">${c.name}</div>`
+        ).join('');
+        list.querySelectorAll('.picker-item').forEach(el => {
+          el.addEventListener('click', () => {
+            currentISO = el.dataset.iso;
+            scenarioOverrides = {};
+            picker.classList.remove('open');
+            render();
+          });
+        });
+      }
+
+      button.addEventListener('click', e => {
+        e.stopPropagation();
+        const wasOpen = picker.classList.contains('open');
+        picker.classList.toggle('open');
+        if (!wasOpen) {
+          renderList('');
+          setTimeout(() => search.focus(), 0);
+        }
+      });
+      search.addEventListener('input', e => renderList(e.target.value));
+      search.addEventListener('keydown', e => {
+        if (e.key === 'Escape') picker.classList.remove('open');
+        if (e.key === 'Enter') {
+          const first = list.querySelector('.picker-item');
+          if (first) first.click();
+        }
+      });
+      document.addEventListener('click', e => {
+        if (!picker.contains(e.target)) picker.classList.remove('open');
+      });
+    }
+
+    function renderReference(country) {
+      const r = baseRates.regimes[country.regime_label];
+      const baseRatePct = (r.base_rate * 100).toFixed(1);
+      document.getElementById('reference-body').innerHTML =
+        `Based on <span class="num">${r.n_obs}</span> <strong>${country.regime_label.replace(/_/g, ' ')}</strong> `
+        + `country-years, training window <span class="num">${weights.train_years[0]}–${weights.train_years[1]}</span>. `
+        + `Base rate in reference class: <span class="num">${baseRatePct}%</span>.`;
+    }
+
+    function renderIndicators(country) {
+      // Use scenario overrides if present, else snapshot values
+      const stratum = weights.strata[country.regime_label];
+      const coefs = stratum.coefficients;
+      const dir = weights.feature_direction;
+
+      const rows = [];
+      for (const z_name of weights.features) {
+        const raw_name = rawName(z_name);
+        const f = country.features[raw_name];
+        const z = scenarioOverrides[raw_name] !== undefined
+          ? (scenarioOverrides[raw_name] - f.mean) / (f.sd || 1)
+          : f.z;
+        const contribution = (coefs[z_name] || 0) * z;
+        const direction = contribution > 0.05 ? 'up' : contribution < -0.05 ? 'down' : 'neutral';
+        const arrow = direction === 'up' ? '▲' : direction === 'down' ? '▼' : '·';
+        const verb = direction === 'up' ? 'raises' : direction === 'down' ? 'lowers' : 'neutral';
+        rows.push(
+          `<div class="indicator-row">
+            <div class="name">${weights.feature_labels[z_name]}</div>
+            <div class="z">${sign(z)}${z.toFixed(2)}</div>
+            <div class="direction direction-${direction}"><span class="arrow">${arrow}</span>${verb}</div>
+           </div>`
+        );
+      }
+      document.getElementById('indicators').innerHTML = rows.join('');
+    }
+
+    function renderSliders(country) {
+      const sliders = [];
+      for (const z_name of weights.features) {
+        const raw_name = rawName(z_name);
+        const f = country.features[raw_name];
+        if (f.value == null || f.mean == null) continue;
+        const cur = scenarioOverrides[raw_name] !== undefined ? scenarioOverrides[raw_name] : f.value;
+        // Slider range = country mean ± 3 SDs (clamped to global plausible if value present)
+        const range_lo = f.mean - 3 * f.sd;
+        const range_hi = f.mean + 3 * f.sd;
+        const step = Math.abs(f.sd / 20) || 0.01;
+        sliders.push(
+          `<div class="slider-row">
+            <div class="slider-label">
+              <span>${weights.feature_labels[z_name]}</span>
+              <span class="raw">${formatRaw(raw_name, cur)}</span>
+            </div>
+            <input type="range" min="${range_lo}" max="${range_hi}" step="${step}"
+                   value="${cur}" data-raw="${raw_name}" />
+          </div>`
+        );
+      }
+      document.getElementById('sliders').innerHTML = sliders.join('');
+      document.querySelectorAll('input[type=range]').forEach(el => {
+        el.addEventListener('input', e => {
+          const raw = e.target.dataset.raw;
+          scenarioOverrides[raw] = parseFloat(e.target.value);
+          recomputeProbability();
+          renderIndicators(snapshot.countries[currentISO]);
+          // Update slider's own raw label
+          const lbl = e.target.parentElement.querySelector('.raw');
+          lbl.textContent = formatRaw(raw, parseFloat(e.target.value));
+        });
+      });
+    }
+
+    function recomputeProbability() {
+      const country = snapshot.countries[currentISO];
+      const stratum = weights.strata[country.regime_label];
+      const zValues = {};
+      for (const z_name of weights.features) {
+        const raw_name = rawName(z_name);
+        const f = country.features[raw_name];
+        if (scenarioOverrides[raw_name] !== undefined) {
+          zValues[z_name] = (scenarioOverrides[raw_name] - f.mean) / (f.sd || 1);
+        } else {
+          zValues[z_name] = f.z;
+        }
+      }
+      const p = scoreLinear(stratum.coefficients, stratum.feature_order, zValues);
+      const isScenario = Object.keys(scenarioOverrides).length > 0;
+      document.getElementById('big-number').textContent = fmt(p);
+      document.getElementById('prob-section').classList.toggle('recomputed', isScenario);
+    }
+
+    function rawName(z_name) {
+      // z_civil_liberties -> civil_liberties
+      return z_name.replace(/^z_/, '');
+    }
+
+    function formatRaw(raw_name, value) {
+      if (value == null) return '—';
+      const pctFeatures = ['gdp_growth', 'cpi_inflation', 'trade_pct_gdp', 'unemployment'];
+      const intFeatures = ['refugee_outflow'];
+      if (pctFeatures.includes(raw_name)) return value.toFixed(2) + '%';
+      if (intFeatures.includes(raw_name)) return Math.round(value).toLocaleString();
+      return value.toFixed(3);
+    }
+
+    function methodologyHtml() {
+      const c = calibration;
+      return `
+        <p>Four separate logistic regressions — one per V-Dem RoW regime category (closed autocracy, electoral autocracy,
+           electoral democracy, liberal democracy) — predict the probability that a country experiences a sustained
+           mass-mobilization event in the next 12 months. Outcome is V-Dem's <code>v2cagenmob_ord ≥ 2</code> at year+1.</p>
+        <p>Features are z-scored within each country, so the model interprets shocks relative to the country's own
+           history rather than global benchmarks. Coefficients and variance-covariance matrices are frozen as JSON;
+           the dashboard recomputes scenario probabilities client-side from sliders.</p>
+        <p><strong>Sources:</strong> V-Dem v16 (governance), World Bank WDI (economics), UNHCR Refugee Statistics
+           (refugee outflows), FAO Food Price Index (global food-price pressure).</p>
+        <p><strong>Holdout calibration (${c.holdout_year}, n=${c.n_holdout}):</strong>
+           Brier score ${c.brier.toFixed(4)} (baseline ${c.brier_baseline.toFixed(4)}; skill score ${c.brier_skill_score.toFixed(3)}),
+           log loss ${c.log_loss.toFixed(4)}.</p>
+        <p><strong>Train window:</strong> ${weights.train_years[0]}–${weights.train_years[1]}. <strong>Holdout:</strong> ${c.holdout_year}.</p>
+      `;
+    }
+
+    load();
+  </script>
+</body>
+</html>

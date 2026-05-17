@@ -1,0 +1,110 @@
+---
+title: "06 — Load Pilster-Böhmelt counterbalancing data"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Downloads the Pilster-Böhmelt "Counterbalancing / Coup-Proofing Data" from
+Harvard Dataverse and lands it as the `pb_counterbalancing` table.
+
+The headline variable is **`effectivenumber`** — an effective-number-of-forces
+fragmentation index (HHI-style). Higher = more fragmented security
+architecture = harder to coordinate a coup (the "counterbalancing" intuition
+from coup-proofing literature).
+
+Coverage: 1970–2025, ~200 countries. Identified by Correlates-of-War code
+(`ccode`); we convert to `iso3c` via `countrycode` so the join through the
+master `countries` table works.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(countrycode)
+```
+
+## Download
+
+Harvard Dataverse exposes a stable REST API. File ID 10980318 is the current
+version of `Coup-Proofing 1970-2025.tab`. We persist to `data/raw/` so the
+parser step is reproducible without re-hitting the network.
+
+```{r}
+#| label: fetch
+dir.create("../data/raw", showWarnings = FALSE, recursive = TRUE)
+pb_local <- "../data/raw/pilster_bohmelt_coup_proofing.tab"
+
+if (!file.exists(pb_local) || file.info(pb_local)$size < 1000) {
+  download.file(
+    "https://dataverse.harvard.edu/api/access/datafile/10980318",
+    pb_local, mode = "wb", quiet = TRUE
+  )
+}
+cat("File:", pb_local, "(", file.info(pb_local)$size, "bytes)\n")
+```
+
+## Parse and crosswalk to ISO3
+
+```{r}
+#| label: parse
+pb <- read.delim(pb_local, sep = "\t", stringsAsFactors = FALSE)
+cat("Raw rows:", nrow(pb), " | Year range:", range(pb$year, na.rm = TRUE), "\n")
+
+# Convert COW code to ISO3 so we can join to `countries`.
+pb$iso3c <- countrycode(pb$ccode, "cown", "iso3c", warn = FALSE)
+n_lost <- sum(is.na(pb$iso3c))
+cat("Rows without ISO3 (dropped):", n_lost, "\n")
+
+pb <- pb[!is.na(pb$iso3c), c("iso3c", "year", "abbrev", "ccode", "effectivenumber")]
+head(pb, 3)
+```
+
+## Write to DuckDB
+
+```{r}
+#| label: write
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+dbWriteTable(con, "pb_counterbalancing", pb, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS rows FROM pb_counterbalancing")
+```
+
+## Coverage
+
+```{r}
+#| label: inspect
+dbGetQuery(con, "
+  SELECT COUNT(DISTINCT iso3c) AS countries,
+         MIN(year) AS earliest, MAX(year) AS latest,
+         ROUND(AVG(effectivenumber), 2) AS avg_effective_n,
+         ROUND(STDDEV(effectivenumber), 2) AS sd_effective_n
+  FROM pb_counterbalancing
+  WHERE effectivenumber IS NOT NULL
+")
+```
+
+## Cuba sanity check
+
+```{r}
+#| label: cuba-check
+dbGetQuery(con, "
+  SELECT year, effectivenumber
+  FROM pb_counterbalancing
+  WHERE iso3c = 'CUB' AND year >= 2015
+  ORDER BY year
+")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

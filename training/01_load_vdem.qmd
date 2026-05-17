@@ -1,0 +1,124 @@
+---
+title: "01 — Load V-Dem"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Loads V-Dem v16 (~28K country-years × 4,618 variables) into the `vdem` table
+of `data/panel.duckdb`. Lands wide; downstream notebooks select variables.
+
+## Install
+
+V-Dem ships as the GitHub R package `vdemdata`. `remotes` is a lighter
+alternative to `devtools` that handles pure-R sources without needing Rtools.
+
+```{r}
+#| label: install
+#| eval: false
+install.packages(c("DBI", "duckdb", "ggplot2", "remotes"))
+remotes::install_github("vdeminstitute/vdemdata")
+```
+
+If the GitHub install fails, download
+[V-Dem CY Full+Others CSV from v-dem.net](https://v-dem.net/data/the-v-dem-dataset/),
+save it at `data/raw/V-Dem-CY-Full+Others-v16.csv`, and swap the `load` chunk
+for a DuckDB `read_csv_auto()` against that path.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(vdemdata)
+library(DBI)
+library(duckdb)
+library(ggplot2)
+```
+
+## Write to DuckDB
+
+```{r}
+#| label: load
+dir.create("../data", showWarnings = FALSE, recursive = TRUE)
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+
+dbWriteTable(con, "vdem", vdem, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS rows FROM vdem")
+```
+
+## Coverage
+
+```{r}
+#| label: inspect
+dbGetQuery(con, "
+  SELECT
+    COUNT(DISTINCT country_name) AS countries,
+    MIN(year) AS earliest_year,
+    MAX(year) AS latest_year
+  FROM vdem
+")
+```
+
+## Cuba sanity check
+
+Four representative indices we'll likely use downstream:
+
+- `v2x_regime` — Regimes of the World (0 = closed autocracy, 3 = liberal democracy)
+- `v2regsuploc` — geographic locus of regime support (ordinal 0–4)
+- `v2x_freexp_altinf` — freedom of expression + alternative information (0–1)
+- `v2x_civlib` — civil liberties (0–1)
+
+```{r}
+#| label: cuba-recent
+cuba_recent <- dbGetQuery(con, "
+  SELECT year,
+         v2x_regime         AS regime_type,
+         v2regsuploc        AS regime_support_locus,
+         v2x_freexp_altinf  AS freedom_expression,
+         v2x_civlib         AS civil_liberties
+  FROM vdem
+  WHERE country_name = 'Cuba' AND year >= 2015
+  ORDER BY year
+")
+cuba_recent
+```
+
+```{r}
+#| label: cuba-plot
+#| fig-cap: "Cuba's civil-liberties index, 2015 onward (V-Dem v16)"
+#| fig-width: 7
+#| fig-height: 4
+parchment <- "#F8F3E8"
+ink       <- "#2A2620"
+accent    <- "#1F3A60"
+
+ggplot(cuba_recent, aes(x = year, y = civil_liberties)) +
+  geom_line(color = accent, linewidth = 0.9) +
+  geom_point(color = accent, size = 2.5) +
+  scale_x_continuous(breaks = cuba_recent$year) +
+  labs(x = NULL, y = "v2x_civlib (0–1)",
+       caption = "Source: V-Dem v16 via vdemdata R package") +
+  theme_minimal(base_family = "serif", base_size = 12) +
+  theme(plot.background  = element_rect(fill = parchment, color = NA),
+        panel.background = element_rect(fill = parchment, color = NA),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "#D8CFC0"),
+        axis.text        = element_text(color = ink),
+        axis.title       = element_text(color = ink),
+        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+```
+
+## Cleanup
+
+DuckDB locks the file while a connection is open; disconnect cleanly so
+subsequent notebooks can write.
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

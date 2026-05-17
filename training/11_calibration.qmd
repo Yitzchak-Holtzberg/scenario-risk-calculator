@@ -1,0 +1,156 @@
+---
+title: "11 — Holdout calibration"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Score the 2023 holdout with the fitted model. Compute:
+
+- **Brier score**: mean squared error of probability predictions (lower = better; 0.25 = random for balanced classes)
+- **Log loss**: cross-entropy (lower = better; log(2) ≈ 0.69 = random)
+- **Reliability**: bin predictions into 10 deciles, compare predicted vs. actual rate per bin
+
+The reliability diagram is what tells us whether "predicted 20%" actually
+corresponds to a ~20% empirical rate.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(ggplot2)
+```
+
+## Load fitted model + holdout panel
+
+```{r}
+#| label: load
+fit <- readRDS("../data/model/fit.rds")
+models   <- fit$models
+features <- fit$features
+
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+needed_cols <- paste(c("iso3c", "year", "regime_type", "unrest_next_year", features), collapse = ", ")
+panel <- dbGetQuery(con, sprintf("SELECT %s FROM panel_labeled", needed_cols))
+dbDisconnect(con, shutdown = TRUE)
+
+holdout <- panel[
+  complete.cases(panel[, c("regime_type", "unrest_next_year", features)]) &
+  panel$year == 2023, ]
+cat("Holdout rows:", nrow(holdout),
+    "  | unrest rate:", round(mean(holdout$unrest_next_year), 3), "\n")
+```
+
+## Score the holdout
+
+Each row uses the model for its regime stratum.
+
+```{r}
+#| label: score
+holdout$pred <- NA_real_
+for (k in names(models)) {
+  idx <- holdout$regime_type == as.integer(k)
+  if (any(idx)) {
+    holdout$pred[idx] <- predict(models[[k]], newdata = holdout[idx, ], type = "response")
+  }
+}
+holdout <- holdout[!is.na(holdout$pred), ]
+cat("Scored rows:", nrow(holdout), "\n")
+```
+
+## Brier and log loss
+
+```{r}
+#| label: metrics
+brier   <- mean((holdout$pred - holdout$unrest_next_year)^2)
+log_loss <- -mean(holdout$unrest_next_year * log(pmax(holdout$pred, 1e-9)) +
+                  (1 - holdout$unrest_next_year) * log(pmax(1 - holdout$pred, 1e-9)))
+base_rate <- mean(holdout$unrest_next_year)
+brier_baseline <- mean((base_rate - holdout$unrest_next_year)^2)
+
+cat("Brier score:        ", round(brier, 4),
+    "  (baseline = always-predict-base-rate:", round(brier_baseline, 4), ")\n")
+cat("Log loss:           ", round(log_loss, 4), "\n")
+cat("Brier skill score:  ", round(1 - brier / brier_baseline, 3),
+    "  (positive = better than baseline)\n")
+```
+
+## Reliability bins
+
+Bucket predictions into deciles and compare predicted vs actual unrest rate
+within each bin. A perfectly calibrated model: predicted ≈ actual.
+
+```{r}
+#| label: reliability
+breaks <- seq(0, 1, by = 0.1)
+holdout$bin <- cut(holdout$pred, breaks = breaks, include.lowest = TRUE, right = FALSE)
+
+reliability <- do.call(rbind, lapply(levels(holdout$bin), function(b) {
+  rows <- holdout[holdout$bin == b, ]
+  if (nrow(rows) == 0) return(NULL)
+  data.frame(
+    bin       = b,
+    predicted = mean(rows$pred),
+    actual    = mean(rows$unrest_next_year),
+    n         = nrow(rows)
+  )
+}))
+reliability
+```
+
+```{r}
+#| label: reliability-plot
+#| fig-cap: "Reliability diagram on 2023 holdout (predicted vs. actual unrest rate by decile)"
+#| fig-width: 6
+#| fig-height: 6
+parchment <- "#F8F3E8"
+ink       <- "#2A2620"
+accent    <- "#1F3A60"
+
+ggplot(reliability, aes(x = predicted, y = actual)) +
+  geom_abline(slope = 1, intercept = 0, color = "#A89880", linetype = "dashed") +
+  geom_line(color = accent, linewidth = 0.8) +
+  geom_point(aes(size = n), color = accent) +
+  scale_size_continuous(range = c(2, 8), name = "n in bin") +
+  coord_fixed(xlim = c(0, 1), ylim = c(0, 1)) +
+  labs(x = "Mean predicted probability", y = "Empirical unrest rate",
+       caption = "Diagonal = perfect calibration") +
+  theme_minimal(base_family = "serif", base_size = 12) +
+  theme(plot.background  = element_rect(fill = parchment, color = NA),
+        panel.background = element_rect(fill = parchment, color = NA),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "#D8CFC0"),
+        axis.text        = element_text(color = ink),
+        axis.title       = element_text(color = ink),
+        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+```
+
+## Persist calibration results
+
+```{r}
+#| label: persist
+calibration <- list(
+  holdout_year = 2023,
+  n_holdout    = nrow(holdout),
+  brier        = brier,
+  brier_baseline = brier_baseline,
+  brier_skill_score = 1 - brier / brier_baseline,
+  log_loss     = log_loss,
+  base_rate    = base_rate,
+  reliability  = list(
+    bin_centers = seq(0.05, 0.95, by = 0.1),
+    predicted   = reliability$predicted,
+    actual      = reliability$actual,
+    n           = reliability$n
+  )
+)
+saveRDS(calibration, "../data/model/calibration.rds")
+cat("Saved data/model/calibration.rds\n")
+```

@@ -1,0 +1,133 @@
+---
+title: "02 — Load World Bank WDI"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Pulls five macroeconomic indicators (inflation, GDP growth, GDP/capita, trade
+exposure, unemployment) from the World Bank's REST API and lands them as the
+`wdi` table in `data/panel.duckdb`. One row per country × year. WDI hits the
+network on every render; values for the most recent 2–3 years may shift as
+the World Bank back-revises.
+
+## Install
+
+```{r}
+#| label: install
+#| eval: false
+install.packages("WDI")
+```
+
+## Libraries
+
+```{r}
+#| label: setup
+library(WDI)
+library(DBI)
+library(duckdb)
+library(ggplot2)
+```
+
+## Indicators
+
+Names on the left become the column names in DuckDB.
+
+```{r}
+#| label: indicators
+indicators <- c(
+  cpi_inflation = "FP.CPI.TOTL.ZG",    # CPI inflation, annual %
+  gdp_growth    = "NY.GDP.MKTP.KD.ZG", # GDP growth, annual %
+  gdp_per_cap   = "NY.GDP.PCAP.KD",    # GDP per capita, constant 2015 US$
+  trade_pct_gdp = "NE.TRD.GNFS.ZS",    # Trade (% of GDP)
+  unemployment  = "SL.UEM.TOTL.ZS"     # Unemployment, % of labor force
+)
+```
+
+## Fetch and write
+
+One row per country-year with five named columns. ~270 reporting entities
+(countries + a few regional aggregates) × ~35 years.
+
+```{r}
+#| label: fetch-write
+wdi <- WDI(country = "all", indicator = indicators,
+           start = 1990, end = format(Sys.Date(), "%Y"))
+nrow(wdi); head(wdi, 3)
+
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+dbWriteTable(con, "wdi", wdi, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS rows FROM wdi")
+```
+
+## Coverage
+
+```{r}
+#| label: inspect
+dbGetQuery(con, "
+  SELECT
+    COUNT(DISTINCT country) AS countries,
+    MIN(year) AS earliest_year,
+    MAX(year) AS latest_year,
+    SUM(CASE WHEN cpi_inflation IS NOT NULL THEN 1 ELSE 0 END) AS cpi_obs,
+    SUM(CASE WHEN gdp_growth    IS NOT NULL THEN 1 ELSE 0 END) AS gdpg_obs
+  FROM wdi
+")
+```
+
+## Cuba sanity check
+
+Cuba doesn't report CPI to the World Bank — `cpi_inflation` will be `NA` for
+every Cuba row. The other four have full coverage. The 2020 GDP collapse
+(−10.95%) is the COVID-19 economic shock.
+
+```{r}
+#| label: cuba-recent
+cuba_recent <- dbGetQuery(con, "
+  SELECT year, cpi_inflation, gdp_growth, gdp_per_cap, trade_pct_gdp, unemployment
+  FROM wdi
+  WHERE iso3c = 'CUB' AND year >= 2015
+  ORDER BY year
+")
+cuba_recent
+```
+
+```{r}
+#| label: cuba-plot
+#| fig-cap: "Cuba's GDP growth, 2015 onward (World Bank WDI)"
+#| fig-width: 7
+#| fig-height: 4
+parchment <- "#F8F3E8"
+ink       <- "#2A2620"
+accent    <- "#1F3A60"
+crisis    <- "#8B2E2E"
+
+ggplot(cuba_recent, aes(x = year, y = gdp_growth)) +
+  geom_hline(yintercept = 0, color = "#A89880", linewidth = 0.4) +
+  geom_line(color = accent, linewidth = 0.9) +
+  geom_point(aes(color = gdp_growth < -5), size = 2.5) +
+  scale_color_manual(values = c(`FALSE` = accent, `TRUE` = crisis), guide = "none") +
+  scale_x_continuous(breaks = cuba_recent$year) +
+  labs(x = NULL, y = "GDP growth (annual %)",
+       caption = "Source: World Bank WDI via WDI R package") +
+  theme_minimal(base_family = "serif", base_size = 12) +
+  theme(plot.background  = element_rect(fill = parchment, color = NA),
+        panel.background = element_rect(fill = parchment, color = NA),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "#D8CFC0"),
+        axis.text        = element_text(color = ink),
+        axis.title       = element_text(color = ink),
+        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

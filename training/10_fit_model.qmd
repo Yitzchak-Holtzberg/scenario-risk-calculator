@@ -1,0 +1,154 @@
+---
+title: "10 — Fit the regime-stratified logistic regression"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Four separate logistic regressions — one per V-Dem RoW regime category —
+predicting `unrest_next_year` from six z-scored covariates. Coefficients and
+the variance-covariance matrix are saved so the dashboard can reproduce
+predictions *and* compute 90% CIs by sampling from `MVN(coef, vcov)`.
+
+**Features (7):**
+- `z_civil_liberties` — regime quality
+- `z_freedom_expression` — speech/media climate
+- `z_gdp_growth` — economic shock
+- `z_refugee_outflow` — population leaving (stress proxy)
+- `z_political_violence_ord` — recent violence
+- `z_ffpi_avg` — global food-price pressure
+- `z_coup_proof_fragmentation` — Pilster-Böhmelt effective-number of forces
+
+de Bruin's `counterbalancing` and `politicization` are loaded into the panel
+but excluded from the v0 fit — their coverage (110 countries through 2010
+plus forward-fill) introduces enough listwise-deletion drop that the larger
+model performs worse than the smaller one. Revisit with median imputation
+in v1.
+
+**Train/test:** train on 1995–2022; predict unrest in 2023+ on holdout 2023.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+```
+
+## Pull the labeled panel
+
+```{r}
+#| label: pull
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+
+features <- c("z_civil_liberties", "z_freedom_expression", "z_gdp_growth",
+              "z_refugee_outflow", "z_political_violence_ord", "z_ffpi_avg",
+              "z_coup_proof_fragmentation")
+
+needed_cols <- paste(c("iso3c", "year", "regime_type", "unrest_next_year", features), collapse = ", ")
+panel <- dbGetQuery(con, sprintf("SELECT %s FROM panel_labeled", needed_cols))
+dbDisconnect(con, shutdown = TRUE)
+
+cat("Total panel rows:", nrow(panel), "\n")
+cat("Rows with non-NA outcome:", sum(!is.na(panel$unrest_next_year)), "\n")
+```
+
+## Filter to complete cases for fitting
+
+The model needs every feature present plus a valid outcome and regime
+category. Listwise deletion is the simplest reasonable default for v0.
+
+```{r}
+#| label: filter
+complete <- panel[complete.cases(panel[, c("regime_type", "unrest_next_year", features)]), ]
+train <- complete[complete$year <= 2022, ]
+holdout <- complete[complete$year == 2023, ]
+
+cat("Train rows: ", nrow(train),
+    "  | unrest rate:", round(mean(train$unrest_next_year), 3), "\n")
+cat("Holdout rows:", nrow(holdout),
+    "  | unrest rate:", round(mean(holdout$unrest_next_year), 3), "\n")
+```
+
+## Fit one model per regime stratum
+
+```{r}
+#| label: fit
+formula_str <- paste("unrest_next_year ~", paste(features, collapse = " + "))
+form <- as.formula(formula_str)
+
+regime_labels <- c("0" = "closed_autocracy",
+                   "1" = "electoral_autocracy",
+                   "2" = "electoral_democracy",
+                   "3" = "liberal_democracy")
+
+models <- list()
+fit_summary <- data.frame()
+
+for (k in 0:3) {
+  stratum <- train[train$regime_type == k, ]
+  if (nrow(stratum) < 30) {
+    cat("Regime", k, "(", regime_labels[as.character(k)], "): only",
+        nrow(stratum), "rows — skipping\n")
+    next
+  }
+  fit <- glm(form, data = stratum, family = binomial(link = "logit"))
+  models[[as.character(k)]] <- fit
+  fit_summary <- rbind(fit_summary, data.frame(
+    regime    = regime_labels[as.character(k)],
+    n_obs     = nrow(stratum),
+    n_unrest  = sum(stratum$unrest_next_year),
+    deviance  = round(fit$deviance, 1),
+    null_dev  = round(fit$null.deviance, 1),
+    pseudo_r2 = round(1 - fit$deviance / fit$null.deviance, 3)
+  ))
+}
+fit_summary
+```
+
+## Inspect coefficients (closed autocracy)
+
+```{r}
+#| label: coef-autocracy
+ca <- models[["0"]]
+co <- summary(ca)$coefficients
+rownames(co) <- gsub("^z_", "", rownames(co))
+round(co, 3)
+```
+
+## Inspect coefficients (electoral autocracy)
+
+```{r}
+#| label: coef-elect-auto
+ea <- models[["1"]]
+co <- summary(ea)$coefficients
+rownames(co) <- gsub("^z_", "", rownames(co))
+round(co, 3)
+```
+
+## Save fitted artifacts to disk for next notebooks
+
+We pickle the fitted models so `11_calibration.qmd` and `12_export_artifacts.qmd`
+can load them without re-fitting.
+
+```{r}
+#| label: persist
+dir.create("../data/model", showWarnings = FALSE, recursive = TRUE)
+saveRDS(
+  list(
+    models       = models,
+    features     = features,
+    regime_labels = regime_labels,
+    train_years  = c(min(train$year), max(train$year)),
+    n_train      = nrow(train),
+    fitted_at    = Sys.time()
+  ),
+  "../data/model/fit.rds"
+)
+cat("Saved to data/model/fit.rds\n")
+```

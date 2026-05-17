@@ -1,0 +1,120 @@
+---
+title: "07 — Load de Bruin State Security Forces data"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Downloads Erica de Bruin's State Security Forces dataset (the country-year
+file from her 2021 JPR article) and lands it as the `security_forces` table.
+
+Coverage: **1960–2010**, ~110 countries with full coverage and another ~90
+with partial. Two model-relevant columns:
+
+- **`counterbalancing`** — index of how many security forces structurally
+  counter each other (a more detailed measure than Pilster-Böhmelt's
+  effective-number)
+- **`politicization`** — index of how many forces have political
+  (regime-aligned) appointment / control
+
+de Bruin ends at 2010. The panel build (08) will forward-fill each country's
+last-available value through 2024 — coup-proofing structure changes slowly.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(readxl)
+library(DBI)
+library(duckdb)
+library(countrycode)
+```
+
+## Download
+
+The replication files are hosted in a Dropbox shared folder. The `?dl=1`
+parameter forces the folder to download as a zip.
+
+```{r}
+#| label: fetch
+raw_dir <- "../data/raw"
+dir.create(raw_dir, showWarnings = FALSE, recursive = TRUE)
+zip_path <- file.path(raw_dir, "debruin_ssf.zip")
+extract_dir <- file.path(raw_dir, "debruin_ssf")
+xls_path <- file.path(extract_dir, "SSFD_cy_jul2020.xls")
+
+if (!file.exists(xls_path)) {
+  download.file(
+    "https://www.dropbox.com/sh/sqilrelbaqa6qpm/AADk3FUPsUapW0sDbHByXmoZa?dl=1",
+    zip_path, mode = "wb", quiet = TRUE
+  )
+  unzip(zip_path, exdir = extract_dir)
+}
+cat("Country-year file:", xls_path, "\n")
+```
+
+## Parse and crosswalk to ISO3
+
+```{r}
+#| label: parse
+db_raw <- read_excel(xls_path)
+cat("Raw rows:", nrow(db_raw), " | Year range:", range(db_raw$year, na.rm = TRUE), "\n")
+
+# Convert COW to ISO3; keep only the columns we want.
+db_raw$iso3c <- countrycode(db_raw$ccode, "cown", "iso3c", warn = FALSE)
+n_lost <- sum(is.na(db_raw$iso3c))
+cat("Rows without ISO3 (dropped):", n_lost, "\n")
+
+security_forces <- as.data.frame(db_raw)[, c("iso3c", "year", "ccode",
+                                              "counterbalancing", "politicization")]
+security_forces <- security_forces[!is.na(security_forces$iso3c), ]
+security_forces$year <- as.integer(security_forces$year)
+head(security_forces, 3)
+```
+
+## Write to DuckDB
+
+```{r}
+#| label: write
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+dbWriteTable(con, "security_forces", security_forces, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS rows FROM security_forces")
+```
+
+## Coverage
+
+```{r}
+#| label: inspect
+dbGetQuery(con, "
+  SELECT COUNT(DISTINCT iso3c) AS countries,
+         MIN(year) AS earliest, MAX(year) AS latest,
+         ROUND(AVG(counterbalancing), 2) AS avg_counterbalancing,
+         ROUND(AVG(politicization), 2) AS avg_politicization
+  FROM security_forces
+  WHERE counterbalancing IS NOT NULL
+")
+```
+
+## Cuba sanity check
+
+```{r}
+#| label: cuba-check
+dbGetQuery(con, "
+  SELECT year, counterbalancing, politicization
+  FROM security_forces
+  WHERE iso3c = 'CUB' AND year >= 2000
+  ORDER BY year
+")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

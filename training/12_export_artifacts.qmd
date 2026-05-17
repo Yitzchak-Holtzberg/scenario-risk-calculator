@@ -1,0 +1,283 @@
+---
+title: "12 — Export frozen artifacts for the dashboard"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Writes four JSON files to `../artifacts/` that the SvelteKit dashboard
+consumes. Math runs in the browser — no backend at runtime.
+
+- **`weights.json`** — coefficients + vcov per regime stratum; feature list
+- **`base_rates.json`** — per-regime base rates from training data
+- **`country_snapshot.json`** — per-country: regime, latest raw values,
+  within-country mean+sd (for slider math), predicted probability + 90% CI,
+  and per-feature contribution
+- **`calibration.json`** — Brier, log loss, reliability bins
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(jsonlite)
+```
+
+## Load fitted model + panel
+
+```{r}
+#| label: load
+fit <- readRDS("../data/model/fit.rds")
+models   <- fit$models
+features <- fit$features
+regime_labels <- fit$regime_labels
+calibration_obj <- readRDS("../data/model/calibration.rds")
+
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+panel <- dbGetQuery(con, "SELECT * FROM panel_labeled")
+dbDisconnect(con, shutdown = TRUE)
+```
+
+## Build weights.json
+
+For each fitted stratum, store the coefficients and the variance-covariance
+matrix. The dashboard samples from `MVN(coef, vcov)` to compute 90% CIs on
+predictions.
+
+```{r}
+#| label: weights
+strata <- list()
+for (k in names(models)) {
+  fit_k <- models[[k]]
+  co <- coef(fit_k)
+  vc <- vcov(fit_k)
+  strata[[regime_labels[[k]]]] <- list(
+    regime_code   = as.integer(k),
+    coefficients  = as.list(co),
+    vcov          = unname(as.matrix(vc)),
+    feature_order = names(co),
+    n_train       = length(fit_k$y),
+    deviance      = unname(fit_k$deviance),
+    null_deviance = unname(fit_k$null.deviance)
+  )
+}
+
+# IMPORTANT: pass named vectors as `as.list()` so jsonlite emits JSON objects
+# with the names as keys. Plain named vectors get unboxed to arrays and lose
+# their names, which breaks the dashboard's `weights.feature_labels[z_name]`
+# lookups (they'd return undefined).
+weights <- list(
+  model_version = "unrest-risk-v0.1",
+  fitted_at     = format(fit$fitted_at, "%Y-%m-%d"),
+  train_years   = fit$train_years,
+  features      = features,
+  feature_labels = as.list(c(
+    z_civil_liberties          = "Civil liberties",
+    z_freedom_expression       = "Freedom of expression",
+    z_gdp_growth               = "GDP growth",
+    z_refugee_outflow          = "Refugee outflow",
+    z_political_violence_ord   = "Political violence",
+    z_ffpi_avg                 = "Global food prices",
+    z_coup_proof_fragmentation = "Coup-proofing fragmentation"
+  )),
+  feature_direction = as.list(c(   # +1 = higher value raises risk, -1 = lowers
+    z_civil_liberties          = -1,
+    z_freedom_expression       = -1,
+    z_gdp_growth               = -1,
+    z_refugee_outflow          = +1,
+    z_political_violence_ord   = +1,
+    z_ffpi_avg                 = +1,
+    z_coup_proof_fragmentation = -1
+  )),
+  strata = strata
+)
+
+dir.create("../artifacts", showWarnings = FALSE, recursive = TRUE)
+write_json(weights, "../artifacts/weights.json", auto_unbox = TRUE, pretty = TRUE, digits = 6)
+cat("Wrote artifacts/weights.json\n")
+```
+
+## Build base_rates.json
+
+```{r}
+#| label: base-rates
+features_check <- c("regime_type", "unrest_next_year", features)
+train_idx <- complete.cases(panel[, features_check]) & panel$year <= 2022
+train <- panel[train_idx, ]
+
+base_rates <- list()
+for (k in 0:3) {
+  stratum <- train[train$regime_type == k, ]
+  if (nrow(stratum) == 0) next
+  base_rates[[regime_labels[[as.character(k)]]]] <- list(
+    regime_code = k,
+    n_obs       = nrow(stratum),
+    n_unrest    = sum(stratum$unrest_next_year),
+    base_rate   = round(mean(stratum$unrest_next_year), 4)
+  )
+}
+
+write_json(list(
+  model_version = "unrest-risk-v0.1",
+  train_years   = fit$train_years,
+  regimes       = base_rates
+), "../artifacts/base_rates.json", auto_unbox = TRUE, pretty = TRUE)
+cat("Wrote artifacts/base_rates.json\n")
+```
+
+## Build country_snapshot.json
+
+For each country, take its **latest** year (2023 in v0). Pull raw values
+and within-country mean/sd so the dashboard can recompute z-scores when
+the user moves a slider. Then score with the regime's model and bootstrap
+a 90% CI by sampling 1,000 times from `MVN(coef, vcov)`.
+
+```{r}
+#| label: snapshot
+# Map z-scored features back to their raw counterparts so the dashboard can
+# work with intelligible values (e.g. show "GDP growth = -10.95%", not "z = -2.3").
+raw_features <- c(
+  z_civil_liberties          = "civil_liberties",
+  z_freedom_expression       = "freedom_expression",
+  z_gdp_growth               = "gdp_growth",
+  z_refugee_outflow          = "refugee_outflow",
+  z_political_violence_ord   = "political_violence_ord",
+  z_ffpi_avg                 = "ffpi_avg",
+  z_coup_proof_fragmentation = "coup_proof_fragmentation"
+)
+
+# Compute within-country mean and sd for each raw feature, across all history.
+country_stats <- list()
+for (iso in unique(panel$iso3c)) {
+  rows <- panel[panel$iso3c == iso, ]
+  stats <- list()
+  for (z_name in names(raw_features)) {
+    raw_name <- raw_features[[z_name]]
+    x <- rows[[raw_name]]
+    if (sum(!is.na(x)) < 5) next
+    stats[[raw_name]] <- list(
+      country_mean = mean(x, na.rm = TRUE),
+      country_sd   = sd(x, na.rm = TRUE)
+    )
+  }
+  country_stats[[iso]] <- stats
+}
+
+# Sampling helper: draw from MVN given coef + vcov, score linearly + sigmoid.
+mvn_sample_ci <- function(model, x_named, n_draw = 1000, alpha = 0.10) {
+  co <- coef(model); vc <- vcov(model)
+  L  <- chol(vc + diag(1e-8, nrow(vc)))  # tiny ridge for numerical safety
+  draws <- t(L) %*% matrix(rnorm(length(co) * n_draw), nrow = length(co)) + co
+  # design vector with intercept first
+  x_full <- c(1, x_named[names(co)[-1]])
+  lp <- as.numeric(t(draws) %*% x_full)
+  p  <- 1 / (1 + exp(-lp))
+  c(point = 1 / (1 + exp(-sum(co * x_full))),
+    lo    = unname(quantile(p, alpha / 2, na.rm = TRUE)),
+    hi    = unname(quantile(p, 1 - alpha / 2, na.rm = TRUE)))
+}
+
+# Build per-country snapshot for the latest year that has complete features.
+latest_year <- max(panel$year[!is.na(panel$mass_mobilization_ord)])
+
+snapshot_rows <- list()
+for (iso in unique(panel$iso3c)) {
+  rows <- panel[panel$iso3c == iso & panel$year <= latest_year, ]
+  if (nrow(rows) == 0) next
+  # Latest non-NA-features row for this country.
+  rows <- rows[order(-rows$year), ]
+  good <- rows[complete.cases(rows[, c("regime_type", features)]), ]
+  if (nrow(good) == 0) next
+  cur <- good[1, ]
+  k <- as.character(cur$regime_type)
+  if (!k %in% names(models)) next
+
+  x_named <- setNames(as.numeric(cur[, features]), features)
+  pred <- mvn_sample_ci(models[[k]], x_named)
+
+  # Contribution = coef * z for each feature (linear-predictor units)
+  co <- coef(models[[k]])
+  contribs <- co[features] * x_named[features]
+
+  # Raw values for sliders
+  raw_vals <- list()
+  stats <- country_stats[[iso]]
+  for (z_name in features) {
+    raw_name <- raw_features[[z_name]]
+    raw_vals[[raw_name]] <- list(
+      value = unname(cur[[raw_name]]),
+      z     = unname(x_named[[z_name]]),
+      mean  = if (!is.null(stats[[raw_name]])) unname(stats[[raw_name]]$country_mean) else NA,
+      sd    = if (!is.null(stats[[raw_name]])) unname(stats[[raw_name]]$country_sd) else NA,
+      contribution = unname(contribs[[z_name]])
+    )
+  }
+
+  snapshot_rows[[iso]] <- list(
+    iso3c        = iso,
+    name         = cur$name,
+    region       = cur$region,
+    subregion    = cur$subregion,
+    regime_type  = as.integer(cur$regime_type),
+    regime_label = regime_labels[[k]],
+    snapshot_year = as.integer(cur$year),
+    predicted_probability = unname(pred["point"]),
+    ci_lo_90  = unname(pred["lo"]),
+    ci_hi_90  = unname(pred["hi"]),
+    features  = raw_vals
+  )
+}
+
+cat("Scored", length(snapshot_rows), "countries for snapshot\n")
+
+write_json(list(
+  model_version = "unrest-risk-v0.1",
+  snapshot_year = latest_year,
+  horizon_months = 12,
+  countries     = snapshot_rows
+), "../artifacts/country_snapshot.json", auto_unbox = TRUE, pretty = TRUE, digits = 6)
+cat("Wrote artifacts/country_snapshot.json\n")
+```
+
+## Build calibration.json
+
+```{r}
+#| label: calibration
+write_json(list(
+  model_version = "unrest-risk-v0.1",
+  holdout_year  = calibration_obj$holdout_year,
+  n_holdout     = calibration_obj$n_holdout,
+  brier         = calibration_obj$brier,
+  brier_baseline = calibration_obj$brier_baseline,
+  brier_skill_score = calibration_obj$brier_skill_score,
+  log_loss      = calibration_obj$log_loss,
+  base_rate     = calibration_obj$base_rate,
+  reliability   = calibration_obj$reliability
+), "../artifacts/calibration.json", auto_unbox = TRUE, pretty = TRUE)
+cat("Wrote artifacts/calibration.json\n")
+```
+
+## Summary
+
+```{r}
+#| label: final
+cat("=== Artifacts in ../artifacts/ ===\n")
+for (f in list.files("../artifacts", pattern = "\\.json$")) {
+  size <- file.info(file.path("../artifacts", f))$size
+  cat(sprintf("  %-30s %8s bytes\n", f, format(size, big.mark = ",")))
+}
+
+# Spot-check Cuba
+cat("\n=== Cuba snapshot ===\n")
+cuba <- snapshot_rows[["CUB"]]
+cat("  Regime:                ", cuba$regime_label, "\n")
+cat("  Snapshot year:         ", cuba$snapshot_year, "\n")
+cat("  Predicted probability: ", round(cuba$predicted_probability, 3), "\n")
+cat("  90% CI:                ", round(cuba$ci_lo_90, 3), "to", round(cuba$ci_hi_90, 3), "\n")
+```

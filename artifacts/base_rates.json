@@ -1,0 +1,30 @@
+{
+  "model_version": "unrest-risk-v0.1",
+  "train_years": [1995, 2022],
+  "regimes": {
+    "closed_autocracy": {
+      "regime_code": 0,
+      "n_obs": 598,
+      "n_unrest": 56,
+      "base_rate": 0.0936
+    },
+    "electoral_autocracy": {
+      "regime_code": 1,
+      "n_obs": 1510,
+      "n_unrest": 212,
+      "base_rate": 0.1404
+    },
+    "electoral_democracy": {
+      "regime_code": 2,
+      "n_obs": 1279,
+      "n_unrest": 141,
+      "base_rate": 0.1102
+    },
+    "liberal_democracy": {
+      "regime_code": 3,
+      "n_obs": 1059,
+      "n_unrest": 102,
+      "base_rate": 0.0963
+    }
+  }
+}

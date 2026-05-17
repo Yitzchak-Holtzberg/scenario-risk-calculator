@@ -1,0 +1,147 @@
+---
+title: "05 — Load FAO Food Price Index"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Downloads FAO's monthly Food Price Index (FFPI), 1990–present, plus the five
+commodity sub-indices (Meat, Dairy, Cereals, Oils, Sugar). Lands as `fao` in
+`data/panel.duckdb`. Unlike the other sources this is a **global** time series,
+not country-level — at panel build time it broadcasts to every country on
+year+month.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(ggplot2)
+```
+
+## Download
+
+Two-step (download then parse) because R's base `file()` can't open HTTPS
+URLs through `read.csv()` on Windows. Persisting the raw CSV at `data/raw/`
+also gives us a reproducibility checkpoint if FAO ever changes the URL.
+
+```{r}
+#| label: fetch
+fao_url <- paste0(
+  "https://www.fao.org/media/docs/worldfoodsituationlibraries/",
+  "default-document-library/food_price_indices_data.csv",
+  "?sfvrsn=523ebd2a_79&download=true"
+)
+
+dir.create("../data/raw", showWarnings = FALSE, recursive = TRUE)
+fao_local <- "../data/raw/fao_food_price_indices.csv"
+download.file(fao_url, fao_local, mode = "wb", quiet = TRUE)
+```
+
+## Parse
+
+The CSV has a publication-style layout: title row, base-period note, header
+row, blank separator, then monthly data. We skip the first two rows so
+`read.csv()` reads the column headers correctly, then drop the all-NA
+separator row downstream.
+
+```{r}
+#| label: parse
+fao_raw <- read.csv(fao_local, skip = 2, header = TRUE,
+                    na.strings = "", check.names = FALSE,
+                    stringsAsFactors = FALSE)
+
+# Drop the 50+ trailing empty padding columns; keep the seven real ones.
+fao <- fao_raw[, c("Date", "Food Price Index", "Meat", "Dairy",
+                   "Cereals", "Oils", "Sugar")]
+names(fao) <- c("date", "ffpi", "meat", "dairy", "cereals", "oils", "sugar")
+fao <- fao[!is.na(fao$date) & fao$date != "", ]
+
+# Split YYYY-MM into integer year + month plus a Date column at month-start.
+parts <- strsplit(fao$date, "-", fixed = TRUE)
+fao$year  <- as.integer(vapply(parts, `[`, character(1), 1))
+fao$month <- as.integer(vapply(parts, `[`, character(1), 2))
+fao$date  <- as.Date(paste0(fao$date, "-01"))
+
+for (col in c("ffpi", "meat", "dairy", "cereals", "oils", "sugar"))
+  fao[[col]] <- suppressWarnings(as.numeric(fao[[col]]))
+
+fao <- fao[, c("date", "year", "month", "ffpi", "meat", "dairy", "cereals", "oils", "sugar")]
+cat("Rows:", nrow(fao), " | Range:",
+    as.character(min(fao$date)), "to", as.character(max(fao$date)), "\n")
+```
+
+## Write to DuckDB
+
+```{r}
+#| label: write
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+dbWriteTable(con, "fao", fao, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS rows, MIN(year) AS first_year, MAX(year) AS last_year FROM fao")
+```
+
+## Peak years sanity check
+
+The three major spikes since 1990: 2008 food-price crisis, 2011 Arab Spring
+run-up, 2022 Russia-Ukraine grain disruption.
+
+```{r}
+#| label: inspect
+dbGetQuery(con, "
+  SELECT year, ROUND(MAX(ffpi),1) AS peak_ffpi, ROUND(AVG(ffpi),1) AS avg_ffpi
+  FROM fao
+  WHERE year IN (2008, 2011, 2022)
+  GROUP BY year
+  ORDER BY year
+")
+```
+
+```{r}
+#| label: ffpi-plot
+#| fig-cap: "FAO Food Price Index (2014–2016 = 100), monthly, 1990 onward"
+#| fig-width: 8
+#| fig-height: 4.2
+parchment <- "#F8F3E8"
+ink       <- "#2A2620"
+accent    <- "#1F3A60"
+crisis    <- "#8B2E2E"
+
+ffpi <- dbGetQuery(con, "SELECT date, ffpi FROM fao ORDER BY date")
+ffpi$date <- as.Date(ffpi$date)
+
+peaks <- data.frame(
+  date  = as.Date(c("2008-06-01", "2011-02-01", "2022-03-01")),
+  ffpi  = c(132.7, 137.6, 159.7),
+  label = c("2008", "2011", "2022")
+)
+
+ggplot(ffpi, aes(x = date, y = ffpi)) +
+  geom_line(color = accent, linewidth = 0.7) +
+  geom_point(data = peaks, color = crisis, size = 3) +
+  geom_text(data = peaks, aes(label = label),
+            color = crisis, nudge_y = 8, family = "serif", fontface = "bold") +
+  scale_x_date(date_breaks = "5 years", date_labels = "%Y") +
+  labs(x = NULL, y = "FAO Food Price Index (2014–2016 = 100)",
+       caption = "Source: FAO Food Price Index") +
+  theme_minimal(base_family = "serif", base_size = 12) +
+  theme(plot.background  = element_rect(fill = parchment, color = NA),
+        panel.background = element_rect(fill = parchment, color = NA),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "#D8CFC0"),
+        axis.text        = element_text(color = ink),
+        axis.title       = element_text(color = ink),
+        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

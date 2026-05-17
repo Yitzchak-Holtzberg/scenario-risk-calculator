@@ -1,0 +1,230 @@
+---
+title: "08 — Build the country-year panel"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Joins V-Dem, WDI, UNHCR, and FAO through the `countries` master table into a
+single country-year panel. One row per (iso3c, year). All numeric features
+are z-scored **within country** so the model learns "this country's shock
+relative to its own history."
+
+Output: `panel_features` table in `data/panel.duckdb`.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(ggplot2)
+```
+
+## Open the panel db
+
+```{r}
+#| label: connect
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+```
+
+## Aggregate FAO to annual
+
+FAO is monthly and global. We average to annual so it lines up with the
+country-year grain. (Year-over-year change would be richer; keeping it simple
+for v0.)
+
+```{r}
+#| label: fao-annual
+fao_annual <- dbGetQuery(con, "
+  SELECT year, AVG(ffpi) AS ffpi_avg
+  FROM fao
+  GROUP BY year
+  ORDER BY year
+")
+dbWriteTable(con, "fao_annual", fao_annual, overwrite = TRUE)
+head(fao_annual, 3)
+```
+
+## Build the raw country-year join
+
+Pull all V-Dem core variables we care about, left-join WDI on (iso3c, year),
+UNHCR on (iso3c, year), and FAO on year alone (it's global).
+
+```{r}
+#| label: raw-join
+raw <- dbGetQuery(con, "
+  SELECT
+    c.iso3c,
+    c.name,
+    c.region,
+    c.subregion,
+    v.year,
+    v.v2x_regime         AS regime_type,
+    v.v2x_civlib         AS civil_liberties,
+    v.v2x_freexp_altinf  AS freedom_expression,
+    v.v2regsuploc        AS regime_support_locus,
+    v.v2cagenmob_ord     AS mass_mobilization_ord,
+    v.v2caautmob_ord     AS autoc_mobilization_ord,
+    v.v2cademmob_ord     AS demoz_mobilization_ord,
+    v.v2caviol_ord       AS political_violence_ord,
+    w.cpi_inflation,
+    w.gdp_growth,
+    w.gdp_per_cap,
+    w.trade_pct_gdp,
+    w.unemployment,
+    (COALESCE(u.refugees, 0) + COALESCE(u.asylum_seekers, 0)) AS refugee_outflow,
+    f.ffpi_avg,
+    pb.effectivenumber   AS coup_proof_fragmentation,
+    sf.counterbalancing,
+    sf.politicization
+  FROM countries c
+  JOIN vdem v       ON c.vdem_id    = v.country_id  AND v.year >= 1995
+  LEFT JOIN wdi w   ON c.iso3c      = w.iso3c       AND v.year = w.year
+  LEFT JOIN unhcr u ON c.iso3c      = u.coo_iso     AND v.year = u.year
+  LEFT JOIN fao_annual f         ON v.year  = f.year
+  LEFT JOIN pb_counterbalancing pb ON c.iso3c = pb.iso3c AND v.year = pb.year
+  LEFT JOIN security_forces sf   ON c.iso3c = sf.iso3c AND v.year = sf.year
+  WHERE c.region IS NOT NULL
+  ORDER BY c.iso3c, v.year
+")
+
+# de Bruin ends at 2010; forward-fill each country's last non-NA value
+# through 2024. Coup-proofing structure changes slowly so this is defensible.
+locf_within <- function(x) {
+  for (i in seq_along(x)) if (is.na(x[i]) && i > 1) x[i] <- x[i - 1]
+  x
+}
+for (col in c("counterbalancing", "politicization")) {
+  raw[[col]] <- ave(raw[[col]], raw$iso3c, FUN = locf_within)
+}
+cat("After forward-fill: counterbalancing non-NA rows:",
+    sum(!is.na(raw$counterbalancing)), "/", nrow(raw), "\n")
+cat("Raw panel rows:", nrow(raw), "\n")
+cat("Countries:     ", length(unique(raw$iso3c)), "\n")
+cat("Year range:    ", range(raw$year), "\n")
+head(raw, 2)
+```
+
+## Within-country z-scoring
+
+For each numeric feature, subtract the country's own historical mean and
+divide by its own historical SD. This makes "Cuba's GDP shock in 2020"
+comparable to "Argentina's GDP shock in 2002" even though their absolute
+GDP-growth distributions are different. Skip countries with too-few obs.
+
+```{r}
+#| label: z-score
+features <- c("civil_liberties", "freedom_expression", "regime_support_locus",
+              "political_violence_ord",
+              "cpi_inflation", "gdp_growth", "gdp_per_cap",
+              "trade_pct_gdp", "unemployment",
+              "refugee_outflow", "ffpi_avg",
+              "coup_proof_fragmentation", "counterbalancing", "politicization")
+
+z_within <- function(x) {
+  if (sum(!is.na(x)) < 5) return(rep(NA_real_, length(x)))
+  m <- mean(x, na.rm = TRUE); s <- sd(x, na.rm = TRUE)
+  if (is.na(s) || s == 0) return(rep(0, length(x)))
+  (x - m) / s
+}
+
+panel <- raw
+for (feat in features) {
+  z_col <- paste0("z_", feat)
+  panel[[z_col]] <- ave(panel[[feat]], panel$iso3c, FUN = z_within)
+}
+
+# Quick sanity: a country's z-scores should average ~0 across history.
+cuba <- subset(panel, iso3c == "CUB")
+cat("Cuba z-score means (should be ~0):\n")
+print(round(sapply(cuba[, paste0("z_", features)], mean, na.rm = TRUE), 3))
+```
+
+## Write the panel
+
+```{r}
+#| label: write
+dbWriteTable(con, "panel_features", panel, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS rows FROM panel_features")
+```
+
+## Panel coverage
+
+```{r}
+#| label: coverage
+dbGetQuery(con, "
+  SELECT
+    year,
+    COUNT(*) AS rows,
+    SUM(CASE WHEN regime_type IS NOT NULL THEN 1 ELSE 0 END) AS regime_obs,
+    SUM(CASE WHEN gdp_growth  IS NOT NULL THEN 1 ELSE 0 END) AS gdp_obs,
+    SUM(CASE WHEN mass_mobilization_ord IS NOT NULL THEN 1 ELSE 0 END) AS mob_obs
+  FROM panel_features
+  WHERE year >= 2018
+  GROUP BY year
+  ORDER BY year
+")
+```
+
+## Sanity plot: Cuba indicators 2015 onward
+
+```{r}
+#| label: cuba-plot
+#| fig-cap: "Cuba indicator z-scores, 2015 onward — built panel coherence check"
+#| fig-width: 8
+#| fig-height: 5
+parchment <- "#F8F3E8"
+ink       <- "#2A2620"
+accent    <- "#1F3A60"
+crisis    <- "#8B2E2E"
+
+cuba_plot <- dbGetQuery(con, "
+  SELECT year,
+         z_civil_liberties   AS civil_liberties,
+         z_gdp_growth        AS gdp_growth,
+         z_refugee_outflow   AS refugee_outflow,
+         z_ffpi_avg          AS food_price
+  FROM panel_features
+  WHERE iso3c = 'CUB' AND year >= 2015
+  ORDER BY year
+")
+
+cuba_long <- stack(cuba_plot[, -1])
+cuba_long$year <- rep(cuba_plot$year, ncol(cuba_plot) - 1)
+names(cuba_long) <- c("z", "indicator", "year")
+
+ggplot(cuba_long, aes(x = year, y = z, color = indicator)) +
+  geom_hline(yintercept = 0, color = "#A89880", linewidth = 0.4) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = unique(cuba_long$year)) +
+  scale_color_manual(values = c(civil_liberties = accent,
+                                gdp_growth      = "#5C7A93",
+                                refugee_outflow = crisis,
+                                food_price      = "#8B6F2B")) +
+  labs(x = NULL, y = "z-score (within-country)",
+       caption = "Source: V-Dem + WDI + UNHCR + FAO via panel.duckdb",
+       color = NULL) +
+  theme_minimal(base_family = "serif", base_size = 12) +
+  theme(plot.background  = element_rect(fill = parchment, color = NA),
+        panel.background = element_rect(fill = parchment, color = NA),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "#D8CFC0"),
+        axis.text        = element_text(color = ink),
+        axis.title       = element_text(color = ink),
+        legend.position  = "bottom",
+        plot.caption     = element_text(color = "#6B5D4F", face = "italic"))
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

@@ -1,0 +1,136 @@
+---
+title: "09 — Label outcome events (next-year mass mobilization)"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+For each (country, year), look up V-Dem's mass-mobilization ordinal at
+(country, year+1) and threshold to a binary outcome:
+
+- `unrest_next_year = 1` if `v2cagenmob_ord >= 4` next year
+- `unrest_next_year = 0` otherwise
+
+V-Dem's `v2cagenmob_ord` ordinal scale (5 levels in v16):
+
+| Value | Meaning | % of country-years |
+|---|---|---|
+| 0 | No mass mobilization | 18% |
+| 1 | Few small events | 27% |
+| 2 | Several small events | 13% |
+| 3 | Several large events | 31% |
+| 4 | Many large events | 11% |
+
+The `>= 4` threshold captures "sustained mass mobilization at scale" —
+matches the original spec resolution criteria (>100k cumulative participants,
+multiple cities, >2 weeks). This is our v0 outcome proxy until ACLED comes
+online with event-level frequency.
+
+Output: `panel_labeled` table (same as `panel_features` + the `unrest_next_year`
+column).
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+```
+
+## Construct the lead label
+
+DuckDB's `LEAD()` window function pulls the next year's value within each
+country's series. We then threshold.
+
+```{r}
+#| label: label
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+
+dbExecute(con, "
+  CREATE OR REPLACE TABLE panel_labeled AS
+  SELECT *,
+         LEAD(mass_mobilization_ord) OVER (PARTITION BY iso3c ORDER BY year) AS mass_mob_next,
+         CASE WHEN LEAD(mass_mobilization_ord) OVER (PARTITION BY iso3c ORDER BY year) >= 4
+              THEN 1
+              WHEN LEAD(mass_mobilization_ord) OVER (PARTITION BY iso3c ORDER BY year) IS NULL
+              THEN NULL
+              ELSE 0 END AS unrest_next_year
+  FROM panel_features
+")
+
+dbGetQuery(con, "SELECT COUNT(*) AS rows FROM panel_labeled")
+```
+
+## Outcome distribution
+
+```{r}
+#| label: distribution
+dbGetQuery(con, "
+  SELECT unrest_next_year, COUNT(*) AS n,
+         ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM panel_labeled WHERE unrest_next_year IS NOT NULL), 1) AS pct
+  FROM panel_labeled
+  WHERE unrest_next_year IS NOT NULL
+  GROUP BY unrest_next_year
+  ORDER BY unrest_next_year
+")
+```
+
+## Outcome rate by regime category
+
+V-Dem RoW: 0=closed autocracy, 1=electoral autocracy, 2=electoral democracy,
+3=liberal democracy. We expect autocracies to show higher mobilization rates
+(more repression triggers more visible protest).
+
+```{r}
+#| label: by-regime
+dbGetQuery(con, "
+  SELECT regime_type,
+         COUNT(*) AS n_obs,
+         SUM(unrest_next_year) AS n_unrest,
+         ROUND(100.0 * AVG(unrest_next_year), 1) AS pct_unrest
+  FROM panel_labeled
+  WHERE unrest_next_year IS NOT NULL AND regime_type IS NOT NULL
+  GROUP BY regime_type
+  ORDER BY regime_type
+")
+```
+
+## Outcome rate over time
+
+```{r}
+#| label: by-year
+dbGetQuery(con, "
+  SELECT year,
+         COUNT(*) AS n_obs,
+         SUM(unrest_next_year) AS n_unrest,
+         ROUND(100.0 * AVG(unrest_next_year), 1) AS pct_unrest
+  FROM panel_labeled
+  WHERE unrest_next_year IS NOT NULL AND year BETWEEN 2018 AND 2023
+  GROUP BY year
+  ORDER BY year
+")
+```
+
+## Cuba check
+
+```{r}
+#| label: cuba-check
+dbGetQuery(con, "
+  SELECT year, mass_mobilization_ord, mass_mob_next, unrest_next_year, regime_type
+  FROM panel_labeled
+  WHERE iso3c = 'CUB' AND year BETWEEN 2018 AND 2023
+  ORDER BY year
+")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

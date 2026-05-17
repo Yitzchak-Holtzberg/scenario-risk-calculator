@@ -1,10 +1,12 @@
 # --- Data (large, downloaded from external sources) -----------------------
 data/raw/
+data/model/
 data/*.duckdb
 data/*.duckdb.wal
 *.csv
 *.parquet
 !artifacts/**/*.csv
+!artifacts/**/*.parquet
 
 # --- Go (api/) -------------------------------------------------------------
 api/bin/
@@ -19,6 +21,9 @@ web/build/
 web/.env
 web/.env.*
 !web/.env.example
+# Local-dev copy of frozen artifacts; canonical files live in top-level
+# artifacts/. Copy when serving locally:  cp artifacts/*.json web/artifacts/
+web/artifacts/
 
 # --- R (training/) ---------------------------------------------------------
 training/.Rhistory
@@ -32,6 +37,11 @@ training/_freeze/
 training/_site/
 training/*.html
 !training/model-card-template.html
+# Quarto auto-generated sibling directories (per-doc libs, figures, cache)
+training/*_files/
+training/*_cache/
+.Renviron
+*.Rcheck/
 
 # --- Editors / OS ----------------------------------------------------------
 .vscode/*

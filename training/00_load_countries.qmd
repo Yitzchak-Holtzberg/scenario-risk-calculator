@@ -1,0 +1,134 @@
+---
+title: "00 — Master country reference"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Builds the `countries` reference table that every downstream source joins
+through. One row per country with all the ID systems we need:
+
+- `iso3c` — ISO 3166-1 alpha-3 (matches WDI, UNHCR, V-Dem `country_text_id`)
+- `iso3n` — ISO numeric (for ACLED/GDELT when those arrive)
+- `vdem_id` — V-Dem's internal country id
+- `gw_code` — Gleditsch-Ward code (for Pilster-Böhmelt, de Bruin)
+- `name` — canonical English name
+- `region`, `subregion` — UN region groupings (for dashboard reference class)
+
+Source: V-Dem's country roster (broadest coverage) plus the `countrycode`
+package for region/GW crosswalks.
+
+## Install
+
+```{r}
+#| label: install
+#| eval: false
+install.packages("countrycode")
+```
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(countrycode)
+```
+
+## Build the reference table
+
+V-Dem already carries `country_text_id` (ISO3) for every country it covers.
+We start from its distinct country list, then use `countrycode` to add
+ISO numeric, GW code, and UN regions.
+
+```{r}
+#| label: build
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+
+vdem_countries <- dbGetQuery(con, "
+  SELECT DISTINCT country_id, country_text_id, country_name
+  FROM vdem
+  WHERE country_text_id IS NOT NULL AND year >= 1990
+  ORDER BY country_name
+")
+
+countries <- data.frame(
+  iso3c       = vdem_countries$country_text_id,
+  name        = vdem_countries$country_name,
+  vdem_id     = vdem_countries$country_id,
+  iso3n       = countrycode(vdem_countries$country_text_id, "iso3c", "iso3n",
+                            warn = FALSE),
+  gw_code     = countrycode(vdem_countries$country_text_id, "iso3c", "gwn",
+                            warn = FALSE),
+  region      = countrycode(vdem_countries$country_text_id, "iso3c", "region",
+                            warn = FALSE),
+  subregion   = countrycode(vdem_countries$country_text_id, "iso3c", "un.regionsub.name",
+                            warn = FALSE),
+  stringsAsFactors = FALSE
+)
+
+cat("Total countries:", nrow(countries), "\n")
+cat("With ISO numeric:", sum(!is.na(countries$iso3n)), "\n")
+cat("With GW code:    ", sum(!is.na(countries$gw_code)), "\n")
+cat("With region:     ", sum(!is.na(countries$region)), "\n")
+head(countries, 5)
+```
+
+## Patch known gaps
+
+`countrycode` doesn't have entries for some V-Dem countries (historical states
+like Czechoslovakia / Yugoslavia, contested cases like Kosovo / Palestine /
+Taiwan). For sovereign-but-contested cases we want in the panel, patch them.
+
+```{r}
+#| label: patches
+patches <- list(
+  XKX = list(name = "Kosovo",            region = "Europe",  subregion = "Southern Europe"),
+  PSE = list(name = "Palestine",         region = "Asia",    subregion = "Western Asia"),
+  TWN = list(name = "Taiwan",            region = "Asia",    subregion = "Eastern Asia")
+)
+
+for (iso in names(patches)) {
+  idx <- which(countries$iso3c == iso)
+  if (length(idx) > 0) {
+    for (field in names(patches[[iso]])) {
+      if (is.na(countries[[field]][idx])) countries[[field]][idx] <- patches[[iso]][[field]]
+    }
+  }
+}
+
+cat("After patches — with region:", sum(!is.na(countries$region)), "of", nrow(countries), "\n")
+```
+
+## Write to DuckDB
+
+```{r}
+#| label: write
+dbWriteTable(con, "countries", countries, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS countries FROM countries")
+```
+
+## Region distribution
+
+```{r}
+#| label: inspect
+dbGetQuery(con, "
+  SELECT region, COUNT(*) AS n
+  FROM countries
+  WHERE region IS NOT NULL
+  GROUP BY region
+  ORDER BY n DESC
+")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```
