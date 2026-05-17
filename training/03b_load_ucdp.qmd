@@ -1,0 +1,112 @@
+---
+title: "03b — Load UCDP GED armed-conflict events"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+UCDP Georeferenced Event Dataset (GED) v25.1 — hand-coded armed-conflict
+events from Uppsala 1989–2024. Each row = one fatal event. We aggregate to
+**country-year**:
+
+- `n_events` — count of events
+- `fatalities_best` — sum of "best" fatality estimate
+- `fatalities_high` — sum of "high" fatality estimate (upper bound)
+
+The CSV is 240 MB raw. We read only the columns we need (`country_id`, `year`,
+`best`, `high`, `low`) to keep memory manageable.
+
+Outcome use (in `09_label_events.qmd`): a country-year is flagged as unrest
+if `fatalities_best >= 100` next year (UCDP's traditional "minor armed
+conflict" threshold is 25; we use 100 to bias toward larger episodes).
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(countrycode)
+```
+
+## Download
+
+```{r}
+#| label: fetch
+dir.create("../data/raw", showWarnings = FALSE, recursive = TRUE)
+ucdp_zip <- "../data/raw/ucdp_ged251.zip"
+ucdp_dir <- "../data/raw/ucdp_ged251"
+ucdp_csv <- file.path(ucdp_dir, "GEDEvent_v25_1.csv")
+
+if (!file.exists(ucdp_csv)) {
+  download.file("https://ucdp.uu.se/downloads/ged/ged251-csv.zip",
+                ucdp_zip, mode = "wb", quiet = TRUE)
+  unzip(ucdp_zip, exdir = ucdp_dir)
+}
+```
+
+## Parse + aggregate
+
+Only the 5 columns we need — saves ~200 MB of memory.
+
+```{r}
+#| label: parse
+ucdp <- read.csv(ucdp_csv,
+                 stringsAsFactors = FALSE,
+                 colClasses = c("country_id" = "integer", "year" = "integer",
+                                "best" = "integer", "high" = "integer", "low" = "integer"),
+                 na.strings = c("", "NA"),
+                 nrows = -1L)
+ucdp <- ucdp[, c("country_id", "year", "best", "high", "low")]
+cat("Raw events:", nrow(ucdp), " | Year range:", range(ucdp$year, na.rm = TRUE), "\n")
+```
+
+```{r}
+#| label: aggregate
+ucdp$iso3c <- countrycode(ucdp$country_id, "cown", "iso3c", warn = FALSE)
+ucdp <- ucdp[!is.na(ucdp$iso3c), ]
+
+ucdp_annual <- aggregate(
+  cbind(n_events       = rep(1, nrow(ucdp)),
+        fatalities_best = ucdp$best,
+        fatalities_high = ucdp$high) ~ iso3c + year,
+  data = ucdp, FUN = sum
+)
+ucdp_annual$year <- as.integer(ucdp_annual$year)
+cat("Country-year aggregates:", nrow(ucdp_annual), "\n")
+head(ucdp_annual, 5)
+```
+
+## Write
+
+```{r}
+#| label: write
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+dbWriteTable(con, "ucdp_annual", ucdp_annual, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS rows, MIN(year) AS first_year, MAX(year) AS last_year FROM ucdp_annual")
+```
+
+## Top fatality years
+
+```{r}
+#| label: inspect
+dbGetQuery(con, "
+  SELECT iso3c, year, n_events, fatalities_best
+  FROM ucdp_annual
+  WHERE year >= 2020
+  ORDER BY fatalities_best DESC
+  LIMIT 10
+")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

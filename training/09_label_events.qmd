@@ -1,5 +1,5 @@
 ---
-title: "09 — Label outcome events (next-year mass mobilization)"
+title: "09 — Label outcome events (multi-source fusion)"
 format:
   html:
     toc: true
@@ -10,29 +10,25 @@ execute:
   message: false
 ---
 
-For each (country, year), look up V-Dem's mass-mobilization ordinal at
-(country, year+1) and threshold to a binary outcome:
+For each (country, year), look at **next year's events** across four
+independent sources and flag the country-year as unrest if **any** of these
+fire:
 
-- `unrest_next_year = 1` if `v2cagenmob_ord >= 4` next year
-- `unrest_next_year = 0` otherwise
-
-V-Dem's `v2cagenmob_ord` ordinal scale (5 levels in v16):
-
-| Value | Meaning | % of country-years |
+| Source | Threshold | Captures |
 |---|---|---|
-| 0 | No mass mobilization | 18% |
-| 1 | Few small events | 27% |
-| 2 | Several small events | 13% |
-| 3 | Several large events | 31% |
-| 4 | Many large events | 11% |
+| Cline Center coups | `n_realized + n_attempted >= 1` | Regime-change attempts |
+| UCDP GED | `fatalities_best >= 100` next year | Organized armed-violence episodes |
+| MMP large protests | `n_large_protests >= 1` next year | Sustained mass mobilization at scale (≥1,000 participants) |
+| V-Dem (fallback) | `v2cagenmob_ord >= 4` next year | When MMP doesn't cover (post-2020) |
 
-The `>= 4` threshold captures "sustained mass mobilization at scale" —
-matches the original spec resolution criteria (>100k cumulative participants,
-multiple cities, >2 weeks). This is our v0 outcome proxy until ACLED comes
-online with event-level frequency.
+Why a fusion: V-Dem alone gave us flat base rates (47–60% across regimes)
+because the ordinal is too broad. Event-based sources are sparser and more
+specific — they should let closed-autocracy rates and liberal-democracy
+rates diverge as they should.
 
-Output: `panel_labeled` table (same as `panel_features` + the `unrest_next_year`
-column).
+V-Dem stays as a **post-2020 fallback** because MMP ends in 2020.
+
+Output: `panel_labeled` table (`panel_features` + outcome columns).
 
 ## Libraries
 
@@ -42,10 +38,11 @@ library(DBI)
 library(duckdb)
 ```
 
-## Construct the lead label
+## Build the lead-label panel
 
-DuckDB's `LEAD()` window function pulls the next year's value within each
-country's series. We then threshold.
+DuckDB does the heavy lifting in one SQL pass. For each (iso3c, year) row in
+`panel_features`, we left-join the next-year row from each event source and
+OR the thresholds.
 
 ```{r}
 #| label: label
@@ -53,14 +50,37 @@ con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
 
 dbExecute(con, "
   CREATE OR REPLACE TABLE panel_labeled AS
+  WITH next_yr AS (
+    SELECT iso3c, year, year + 1 AS forecast_year
+    FROM panel_features
+  ),
+  fused AS (
+    SELECT
+      p.*,
+      LEAD(mass_mobilization_ord) OVER (PARTITION BY p.iso3c ORDER BY p.year) AS mass_mob_next,
+
+      -- per-source flags for next year, defaulting NULL to 0
+      COALESCE(c.n_realized, 0)  + COALESCE(c.n_attempted, 0)   AS coup_flag,
+      COALESCE(u.fatalities_best, 0)                            AS ucdp_fatal_next,
+      COALESCE(m.n_large_protests, 0)                           AS mmp_large_next,
+      LEAD(mass_mobilization_ord) OVER (PARTITION BY p.iso3c ORDER BY p.year) AS vdem_mob_next
+    FROM panel_features p
+    LEFT JOIN coups_annual c ON c.iso3c = p.iso3c AND c.year = p.year + 1
+    LEFT JOIN ucdp_annual  u ON u.iso3c = p.iso3c AND u.year = p.year + 1
+    LEFT JOIN mmp_annual   m ON m.iso3c = p.iso3c AND m.year = p.year + 1
+  )
   SELECT *,
-         LEAD(mass_mobilization_ord) OVER (PARTITION BY iso3c ORDER BY year) AS mass_mob_next,
-         CASE WHEN LEAD(mass_mobilization_ord) OVER (PARTITION BY iso3c ORDER BY year) >= 4
-              THEN 1
-              WHEN LEAD(mass_mobilization_ord) OVER (PARTITION BY iso3c ORDER BY year) IS NULL
-              THEN NULL
-              ELSE 0 END AS unrest_next_year
-  FROM panel_features
+    CASE
+      WHEN coup_flag >= 1
+        OR ucdp_fatal_next >= 100
+        OR mmp_large_next >= 1
+        OR (vdem_mob_next >= 4 AND year >= 2020) -- V-Dem fallback for post-MMP years
+      THEN 1
+      WHEN vdem_mob_next IS NULL AND coup_flag = 0 AND ucdp_fatal_next = 0 AND mmp_large_next = 0
+      THEN NULL    -- no info about next year for this country
+      ELSE 0
+    END AS unrest_next_year
+  FROM fused
 ")
 
 dbGetQuery(con, "SELECT COUNT(*) AS rows FROM panel_labeled")
@@ -80,11 +100,26 @@ dbGetQuery(con, "
 ")
 ```
 
-## Outcome rate by regime category
+## Which source fires most often?
 
-V-Dem RoW: 0=closed autocracy, 1=electoral autocracy, 2=electoral democracy,
-3=liberal democracy. We expect autocracies to show higher mobilization rates
-(more repression triggers more visible protest).
+Useful for diagnosing whether one source is dominating the label.
+
+```{r}
+#| label: source-contribution
+dbGetQuery(con, "
+  SELECT
+    SUM(CASE WHEN coup_flag      >= 1 THEN 1 ELSE 0 END) AS n_coups,
+    SUM(CASE WHEN ucdp_fatal_next >= 100 THEN 1 ELSE 0 END) AS n_ucdp,
+    SUM(CASE WHEN mmp_large_next  >= 1 THEN 1 ELSE 0 END) AS n_mmp,
+    SUM(CASE WHEN vdem_mob_next   >= 4 AND year >= 2020 THEN 1 ELSE 0 END) AS n_vdem,
+    SUM(unrest_next_year) AS n_any_unrest,
+    COUNT(*) AS n_total
+  FROM panel_labeled
+  WHERE unrest_next_year IS NOT NULL
+")
+```
+
+## Outcome rate by regime category
 
 ```{r}
 #| label: by-regime
@@ -100,30 +135,14 @@ dbGetQuery(con, "
 ")
 ```
 
-## Outcome rate over time
-
-```{r}
-#| label: by-year
-dbGetQuery(con, "
-  SELECT year,
-         COUNT(*) AS n_obs,
-         SUM(unrest_next_year) AS n_unrest,
-         ROUND(100.0 * AVG(unrest_next_year), 1) AS pct_unrest
-  FROM panel_labeled
-  WHERE unrest_next_year IS NOT NULL AND year BETWEEN 2018 AND 2023
-  GROUP BY year
-  ORDER BY year
-")
-```
-
 ## Cuba check
 
 ```{r}
 #| label: cuba-check
 dbGetQuery(con, "
-  SELECT year, mass_mobilization_ord, mass_mob_next, unrest_next_year, regime_type
+  SELECT year, coup_flag, ucdp_fatal_next, mmp_large_next, vdem_mob_next, unrest_next_year
   FROM panel_labeled
-  WHERE iso3c = 'CUB' AND year BETWEEN 2018 AND 2023
+  WHERE iso3c = 'CUB' AND year BETWEEN 2015 AND 2023
   ORDER BY year
 ")
 ```

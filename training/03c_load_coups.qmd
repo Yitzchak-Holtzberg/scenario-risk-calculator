@@ -1,0 +1,103 @@
+---
+title: "03c — Load Cline Center Coup d'État Project"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Hand-coded coup events 1945–2026 from the Cline Center at University of
+Illinois. Each row = one coup event. We aggregate to **country-year**:
+
+- `n_realized` — successful coups
+- `n_attempted` — attempted-but-failed coups
+- `n_conspiracy` — uncovered conspiracies that didn't reach the attempt stage
+
+Outcome use (in `09_label_events.qmd`): a country-year is flagged as unrest
+if there's any `realized OR attempted` coup next year. Conspiracies are
+informational but not part of the binary outcome.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(countrycode)
+```
+
+## Download
+
+The Illinois Data Bank serves files at predictable `/datafiles/{id}/download`
+URLs. ID `lpt58` is the main CSV for v2.1.2.
+
+```{r}
+#| label: fetch
+dir.create("../data/raw", showWarnings = FALSE, recursive = TRUE)
+coup_local <- "../data/raw/cline_coups.csv"
+if (!file.exists(coup_local) || file.info(coup_local)$size < 1000) {
+  download.file("https://databank.illinois.edu/datafiles/lpt58/download",
+                coup_local, mode = "wb", quiet = TRUE)
+}
+```
+
+## Parse + aggregate
+
+```{r}
+#| label: parse
+coups <- read.csv(coup_local, stringsAsFactors = FALSE)
+cat("Raw coup events:", nrow(coups), " | Year range:", range(coups$year, na.rm = TRUE), "\n")
+cat("Event types:\n")
+table(coups$event_type, useNA = "ifany")
+```
+
+```{r}
+#| label: aggregate
+coups$iso3c <- countrycode(coups$cowcode, "cown", "iso3c", warn = FALSE)
+coups <- coups[!is.na(coups$iso3c), ]
+
+# Cline's binary flag columns: realized=1 for successful, attempt=1 for
+# failed-but-attempted, conspiracy=1 for uncovered plot. A given event row
+# carries exactly one of these flags = 1.
+coups_annual <- aggregate(
+  cbind(n_realized   = coups$realized,
+        n_attempted  = coups$attempt,
+        n_conspiracy = coups$conspiracy) ~ iso3c + year,
+  data = coups, FUN = sum
+)
+coups_annual$year <- as.integer(coups_annual$year)
+cat("Country-year aggregates:", nrow(coups_annual), "\n")
+head(coups_annual, 5)
+```
+
+## Write
+
+```{r}
+#| label: write
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+dbWriteTable(con, "coups_annual", coups_annual, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS rows, MIN(year) AS first_year, MAX(year) AS last_year FROM coups_annual")
+```
+
+## Recent coups (2018+)
+
+```{r}
+#| label: inspect
+dbGetQuery(con, "
+  SELECT iso3c, year, n_realized, n_attempted
+  FROM coups_annual
+  WHERE year >= 2018 AND (n_realized > 0 OR n_attempted > 0)
+  ORDER BY year DESC, iso3c
+")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

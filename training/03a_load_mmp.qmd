@@ -1,0 +1,105 @@
+---
+title: "03a — Load Mass Mobilization Project (MMP)"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+Hand-coded large-protest events 1990–2020 from Clark & Regan's Mass
+Mobilization Project (Harvard Dataverse). Each row = one protest event with
+size, violence, and date fields. We aggregate to **country-year counts**:
+
+- `n_protests` — total protests this year
+- `n_large_protests` — protests with `participants_category` indicating ≥1,000 (i.e., "1000s", "10000s", "100000s", "millions")
+- `n_violent_protests` — protests where `protesterviolence = 1`
+
+Outcome use (in `09_label_events.qmd`): a country-year is flagged as unrest
+if it has any `large_protest` next year.
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(countrycode)
+```
+
+## Download (Harvard Dataverse)
+
+```{r}
+#| label: fetch
+dir.create("../data/raw", showWarnings = FALSE, recursive = TRUE)
+mmp_local <- "../data/raw/mmp_all.tab"
+if (!file.exists(mmp_local) || file.info(mmp_local)$size < 1000) {
+  download.file(
+    "https://dataverse.harvard.edu/api/access/datafile/4291456",
+    mmp_local, mode = "wb", quiet = TRUE
+  )
+}
+```
+
+## Parse + aggregate
+
+```{r}
+#| label: parse
+mmp <- read.delim(mmp_local, sep = "\t", stringsAsFactors = FALSE, quote = "\"")
+cat("Raw events:", nrow(mmp), " | Year range:", range(mmp$year, na.rm = TRUE), "\n")
+table(mmp$participants_category, useNA = "ifany")
+```
+
+The size buckets we treat as "large" (≥1,000 participants):
+
+```{r}
+#| label: aggregate
+large_buckets <- c("1000s", "10000s", "100000s", "millions",
+                   "1000-1999", "2000-9999")
+
+mmp$is_large   <- mmp$participants_category %in% large_buckets
+mmp$is_violent <- mmp$protesterviolence == 1
+mmp$iso3c <- countrycode(mmp$ccode, "cown", "iso3c", warn = FALSE)
+mmp <- mmp[!is.na(mmp$iso3c), ]
+
+mmp_annual <- aggregate(
+  cbind(n_protests = rep(1, nrow(mmp)),
+        n_large_protests   = mmp$is_large,
+        n_violent_protests = mmp$is_violent) ~ iso3c + year,
+  data = mmp, FUN = sum
+)
+mmp_annual$year <- as.integer(mmp_annual$year)
+cat("Country-year aggregates:", nrow(mmp_annual), "\n")
+head(mmp_annual, 5)
+```
+
+## Write
+
+```{r}
+#| label: write
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+dbWriteTable(con, "mmp_annual", mmp_annual, overwrite = TRUE)
+dbGetQuery(con, "SELECT COUNT(*) AS rows, MIN(year) AS first_year, MAX(year) AS last_year FROM mmp_annual")
+```
+
+## Top "large protest" years
+
+```{r}
+#| label: inspect
+dbGetQuery(con, "
+  SELECT iso3c, year, n_protests, n_large_protests, n_violent_protests
+  FROM mmp_annual
+  ORDER BY n_large_protests DESC, n_protests DESC
+  LIMIT 10
+")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```
