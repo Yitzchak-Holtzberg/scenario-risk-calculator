@@ -86,7 +86,12 @@ raw <- dbGetQuery(con, "
     fh.hr_score          AS fariss_hr_score,
     pol.polity2          AS polity2
   FROM countries c
-  JOIN vdem v       ON c.vdem_id    = v.country_id  AND v.year >= 1995
+  -- Cap at 2024: WDI data for most countries ends here. V-Dem v16 has
+  -- partial 2025 stub data with NAs in WDI/UNHCR/etc., which gets filled
+  -- by region-median imputation. The snapshot would then pick 2025 (mostly
+  -- imputed) over 2024 (mostly real). Filter to keep 2024 as the snapshot
+  -- year for now. Revisit when next year's data releases land.
+  JOIN vdem v       ON c.vdem_id    = v.country_id  AND v.year >= 1995 AND v.year <= 2024
   LEFT JOIN wdi w   ON c.iso3c      = w.iso3c       AND v.year = w.year
   LEFT JOIN unhcr u ON c.iso3c      = u.coo_iso     AND v.year = u.year
   LEFT JOIN fao_annual f         ON v.year  = f.year
