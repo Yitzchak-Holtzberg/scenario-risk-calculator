@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scenario Risk Atlas — v0.6 mock</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --parchment: #F8F3E8;
+      --parchment-light: #FFFCF5;
+      --ink: #2A2620;
+      --ink-muted: #6B5D4F;
+      --border: #D8CFC0;
+      --border-subtle: #E8E0CF;
+      --mob: #5C7A93;       /* mobilization = cooler blue */
+      --vio: #8B2E2E;       /* violence = crisis red */
+      --highlight: #1F3A60;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--parchment); color: var(--ink);
+      font-family: 'Source Serif 4', Charter, serif; font-size: 16px; line-height: 1.55;
+    }
+    .num { font-variant-numeric: tabular-nums; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .page { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: auto 1fr; gap: 24px; min-height: 100vh; padding: 24px 32px; }
+    @media (max-width: 1100px) { .page { grid-template-columns: 1fr; } }
+
+    header { grid-column: 1 / -1; border-bottom: 2px solid var(--ink); padding-bottom: 14px; display: flex; justify-content: space-between; align-items: baseline; }
+    header h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+    header .subtitle { color: var(--ink-muted); font-size: 13px; font-style: italic; }
+    header .nav { font-size: 12px; color: var(--ink-muted); }
+    header .nav a { color: var(--highlight); text-decoration: none; margin-left: 16px; }
+    header .nav a.active { color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--ink); }
+
+    .atlas-pane { background: var(--parchment-light); border: 1px solid var(--border-subtle); padding: 24px; position: relative; }
+    .atlas-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--ink-muted); font-weight: 600; margin-bottom: 16px; }
+    .atlas-svg { width: 100%; height: 520px; cursor: crosshair; }
+    .atlas-svg .grid line { stroke: var(--border-subtle); }
+    .atlas-svg .axis line, .atlas-svg .axis path { stroke: var(--ink-muted); fill: none; }
+    .atlas-svg .axis text { font-family: 'JetBrains Mono', monospace; font-size: 10px; fill: var(--ink-muted); }
+    .atlas-svg .axis-label { font-size: 11px; fill: var(--ink); font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; }
+    .atlas-svg circle { fill: var(--ink-muted); fill-opacity: 0.45; stroke: none; transition: fill 0.15s; }
+    .atlas-svg circle.selected { fill: var(--highlight); fill-opacity: 1; stroke: var(--parchment-light); stroke-width: 2; }
+    .atlas-svg circle:hover { fill: var(--highlight); fill-opacity: 0.85; }
+    .atlas-svg text.country-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; fill: var(--ink); pointer-events: none; }
+    .atlas-svg text.selected-label { font-family: 'Source Serif 4', serif; font-size: 14px; font-weight: 600; fill: var(--highlight); pointer-events: none; }
+    .quadrant-label { position: absolute; font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.15em; font-style: italic; pointer-events: none; }
+    .quadrant-label.tl { top: 36px;     left:  44px;  }
+    .quadrant-label.tr { top: 36px;     right: 24px;  text-align: right; }
+    .quadrant-label.bl { bottom: 40px;  left:  44px;  }
+    .quadrant-label.br { bottom: 40px;  right: 24px;  text-align: right; }
+
+    .right-rail { display: flex; flex-direction: column; gap: 16px; }
+    .country-card { background: var(--parchment-light); border: 1px solid var(--border-subtle); padding: 20px; }
+    .country-card .country-name { font-size: 28px; font-weight: 600; letter-spacing: -0.01em; }
+    .country-card .country-meta { font-size: 12px; color: var(--ink-muted); margin-bottom: 16px; font-style: italic; }
+    .twin-prob { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+    .twin-prob .tier-card { padding: 14px; background: var(--parchment); border-left: 3px solid var(--ink-muted); }
+    .twin-prob .tier-card.mob { border-left-color: var(--mob); }
+    .twin-prob .tier-card.vio { border-left-color: var(--vio); }
+    .twin-prob .tier-card .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-muted); font-weight: 600; }
+    .twin-prob .tier-card .value { font-size: 34px; font-weight: 600; line-height: 1.1; margin-top: 6px; }
+    .twin-prob .tier-card .ci { font-size: 11px; color: var(--ink-muted); margin-top: 4px; font-style: italic; }
+    .twin-prob .tier-card.mob .value { color: var(--mob); }
+    .twin-prob .tier-card.vio .value { color: var(--vio); }
+
+    .indicators { background: var(--parchment-light); border: 1px solid var(--border-subtle); padding: 20px; }
+    .indicators-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--ink-muted); font-weight: 600; margin-bottom: 14px; }
+    .ind-row { display: grid; grid-template-columns: 1fr 70px 1fr 1fr; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+    .ind-row.header { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-muted); font-weight: 600; }
+    .ind-row .name { font-size: 13px; }
+    .ind-row .val { font-family: 'JetBrains Mono', monospace; font-size: 12px; text-align: right; }
+    .ind-row .bar { position: relative; height: 14px; background: transparent; }
+    .ind-row .bar .axis { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
+    .ind-row .bar .fill { position: absolute; top: 2px; bottom: 2px; }
+    .ind-row .bar .fill.pos { left: 50%; background: var(--vio); opacity: 0.65; }
+    .ind-row .bar .fill.neg { right: 50%; background: var(--mob); opacity: 0.65; }
+    .ind-row.header .bar { font-size: 10px; color: var(--ink-muted); text-align: center; padding-top: 2px; }
+
+    footer { grid-column: 1 / -1; padding-top: 18px; border-top: 1px solid var(--border-subtle); font-size: 11px; color: var(--ink-muted); display: flex; justify-content: space-between; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div>
+        <h1>Scenario Risk Atlas</h1>
+        <div class="subtitle">Click any country to drill in. v0.6 layout candidate · Atlas</div>
+      </div>
+      <div class="nav">
+        <a href="index.html">Compare layouts</a>
+        <a href="v06_atlas.html" class="active">Atlas</a>
+        <a href="v06_brief.html">Brief</a>
+        <a href="v06_index.html">Index</a>
+      </div>
+    </header>
+
+    <section class="atlas-pane">
+      <div class="atlas-title">158 countries · 2025 features → 2026 forecast</div>
+      <svg class="atlas-svg" id="scatter" viewBox="0 0 800 520" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="quadrant-label tl">Mobilization but no armed crisis</div>
+      <div class="quadrant-label tr">Mobilization + armed crisis</div>
+      <div class="quadrant-label bl">Stable</div>
+      <div class="quadrant-label br">Armed crisis, low protest</div>
+    </section>
+
+    <aside class="right-rail">
+      <div class="country-card" id="country-card">Loading…</div>
+      <div class="indicators" id="indicators"></div>
+    </aside>
+
+    <footer>
+      <div id="version-info">v0.6 · two-tier outcome (mobilization + armed violence)</div>
+      <div>Hover any dot for country; click to select.</div>
+    </footer>
+  </div>
+
+  <script>
+    const ARTIFACT_BASE = './artifacts/';
+    let snapshot, weights, currentISO = 'USA';
+
+    async function load() {
+      const [s, w] = await Promise.all([
+        fetch(ARTIFACT_BASE + 'country_snapshot.json').then(r => r.json()),
+        fetch(ARTIFACT_BASE + 'weights.json').then(r => r.json())
+      ]);
+      snapshot = s; weights = w;
+      drawScatter();
+      renderCountry();
+    }
+
+    function drawScatter() {
+      const svg = document.getElementById('scatter');
+      const W = 800, H = 520, M = { t: 30, r: 30, b: 50, l: 60 };
+      const w = W - M.l - M.r, h = H - M.t - M.b;
+      svg.innerHTML = '';
+
+      // background
+      svg.innerHTML += `<rect x="${M.l}" y="${M.t}" width="${w}" height="${h}" fill="#FFFCF5" stroke="#D8CFC0"/>`;
+      // crosshair at 50%
+      svg.innerHTML += `<line class="grid" x1="${M.l + w/2}" y1="${M.t}" x2="${M.l + w/2}" y2="${M.t + h}" stroke-dasharray="3,3"/>`;
+      svg.innerHTML += `<line class="grid" x1="${M.l}" y1="${M.t + h/2}" x2="${M.l + w}" y2="${M.t + h/2}" stroke-dasharray="3,3"/>`;
+      // axes
+      for (let i = 0; i <= 10; i++) {
+        const x = M.l + (i / 10) * w;
+        const y = M.t + h - (i / 10) * h;
+        svg.innerHTML += `<line class="grid" x1="${x}" y1="${M.t}" x2="${x}" y2="${M.t + h}"/>`;
+        svg.innerHTML += `<line class="grid" x1="${M.l}" y1="${y}" x2="${M.l + w}" y2="${y}"/>`;
+        if (i % 2 === 0) {
+          svg.innerHTML += `<text class="num" x="${x}" y="${M.t + h + 14}" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#6B5D4F">${i*10}%</text>`;
+          svg.innerHTML += `<text class="num" x="${M.l - 6}" y="${y + 3}" text-anchor="end" font-family="JetBrains Mono" font-size="10" fill="#6B5D4F">${i*10}%</text>`;
+        }
+      }
+      // axis labels
+      svg.innerHTML += `<text class="axis-label" x="${M.l + w/2}" y="${M.t + h + 36}" text-anchor="middle">P(mobilization)</text>`;
+      svg.innerHTML += `<text class="axis-label" x="${M.l - 42}" y="${M.t + h/2}" text-anchor="middle" transform="rotate(-90, ${M.l - 42}, ${M.t + h/2})">P(violence / coup)</text>`;
+
+      // dots
+      const countries = Object.values(snapshot.countries);
+      countries.forEach(c => {
+        const x = M.l + c.mobilization.probability * w;
+        const y = M.t + h - c.violence.probability * h;
+        const sel = c.iso3c === currentISO;
+        const cls = sel ? 'selected' : '';
+        const r = sel ? 7 : 4;
+        svg.innerHTML += `<circle class="${cls}" cx="${x}" cy="${y}" r="${r}" data-iso="${c.iso3c}"><title>${c.name} — mob ${(c.mobilization.probability*100).toFixed(0)}%, vio ${(c.violence.probability*100).toFixed(0)}%</title></circle>`;
+        if (sel) {
+          svg.innerHTML += `<text class="selected-label" x="${x + 12}" y="${y + 4}">${c.name}</text>`;
+        }
+      });
+
+      // re-attach click handlers
+      [...svg.querySelectorAll('circle')].forEach(el => {
+        el.addEventListener('click', () => {
+          currentISO = el.dataset.iso;
+          drawScatter();
+          renderCountry();
+        });
+      });
+    }
+
+    function renderCountry() {
+      const c = snapshot.countries[currentISO];
+      if (!c) return;
+      const card = document.getElementById('country-card');
+      card.innerHTML = `
+        <div class="country-name">${c.name}</div>
+        <div class="country-meta">${c.regime_label.replace(/_/g, ' ')} · ${c.region} · scored from ${c.snapshot_year}</div>
+        <div class="twin-prob">
+          <div class="tier-card mob">
+            <div class="label">Mobilization</div>
+            <div class="value num">${pct(c.mobilization.probability)}</div>
+            <div class="ci">90% CI ${pct(c.mobilization.ci_lo_90)} – ${pct(c.mobilization.ci_hi_90)}</div>
+          </div>
+          <div class="tier-card vio">
+            <div class="label">Armed / coup</div>
+            <div class="value num">${pct(c.violence.probability)}</div>
+            <div class="ci">90% CI ${pct(c.violence.ci_lo_90)} – ${pct(c.violence.ci_hi_90)}</div>
+          </div>
+        </div>
+      `;
+
+      const ind = document.getElementById('indicators');
+      const coefsMob = weights.tiers.mobilization.pooled.coefficients;
+      const coefsVio = weights.tiers.violence.pooled.coefficients;
+      const rows = weights.features.map(f => ({
+        f,
+        label: weights.feature_labels[f],
+        v: c.features[f]?.value ?? null,
+        mob: (coefsMob[f] || 0) * (c.features[f]?.value ?? 0),
+        vio: (coefsVio[f] || 0) * (c.features[f]?.value ?? 0)
+      }));
+      const maxAbs = Math.max(0.6, ...rows.flatMap(r => [Math.abs(r.mob), Math.abs(r.vio)]));
+      ind.innerHTML = `
+        <div class="indicators-title">Per-feature logit contribution</div>
+        <div class="ind-row header">
+          <div>Indicator</div><div class="val">Value</div><div class="bar">Mobilization</div><div class="bar">Armed/coup</div>
+        </div>
+        ${rows.map(r => `
+          <div class="ind-row">
+            <div class="name">${r.label}</div>
+            <div class="val">${fmtVal(r.f, r.v)}</div>
+            <div class="bar">
+              <div class="axis"></div>
+              ${r.mob > 0
+                ? `<div class="fill pos" style="width:${Math.min(50, Math.abs(r.mob)/maxAbs*50)}%; background: var(--mob)"></div>`
+                : r.mob < 0
+                ? `<div class="fill neg" style="width:${Math.min(50, Math.abs(r.mob)/maxAbs*50)}%; background: var(--mob)"></div>`
+                : ''}
+            </div>
+            <div class="bar">
+              <div class="axis"></div>
+              ${r.vio > 0
+                ? `<div class="fill pos" style="width:${Math.min(50, Math.abs(r.vio)/maxAbs*50)}%"></div>`
+                : r.vio < 0
+                ? `<div class="fill neg" style="width:${Math.min(50, Math.abs(r.vio)/maxAbs*50)}%; background: var(--vio)"></div>`
+                : ''}
+            </div>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    function pct(x) { return (x*100).toFixed(0) + '%'; }
+    function fmtVal(f, v) {
+      if (v == null) return '—';
+      if (['gdp_growth','cpi_inflation','unemployment'].includes(f)) return v.toFixed(1)+'%';
+      if (f === 'civil_liberties') return v.toFixed(2);
+      if (['loser_consent','political_violence_ord_lag1','conflict_neighbors_count'].includes(f)) return Math.round(v);
+      return v.toFixed(2);
+    }
+
+    load();
+  </script>
+</body>
+</html>

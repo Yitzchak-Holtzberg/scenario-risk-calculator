@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scenario Risk Index — v0.6 mock</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --parchment: #F8F3E8;
+      --parchment-light: #FFFCF5;
+      --ink: #2A2620;
+      --ink-muted: #6B5D4F;
+      --border: #D8CFC0;
+      --border-subtle: #E8E0CF;
+      --mob: #5C7A93;
+      --vio: #8B2E2E;
+      --highlight: #1F3A60;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { background: var(--parchment); color: var(--ink); font-family: 'Source Serif 4', Charter, serif; font-size: 16px; line-height: 1.5; }
+    .num { font-variant-numeric: tabular-nums; }
+
+    .page { max-width: 1500px; margin: 0 auto; padding: 24px 32px 80px; }
+
+    header { border-bottom: 2px solid var(--ink); padding-bottom: 14px; display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 24px; }
+    header h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+    header .subtitle { color: var(--ink-muted); font-size: 13px; font-style: italic; }
+    header .nav { font-size: 12px; color: var(--ink-muted); }
+    header .nav a { color: var(--highlight); text-decoration: none; margin-left: 16px; }
+    header .nav a.active { color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--ink); }
+
+    .controls { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; padding: 14px 18px; background: var(--parchment-light); border: 1px solid var(--border-subtle); }
+    .controls .search { font-family: inherit; font-size: 15px; padding: 6px 12px; background: var(--parchment); border: 1px solid var(--border); flex: 0 0 280px; }
+    .controls .filter-group { font-size: 12px; color: var(--ink-muted); display: flex; gap: 8px; align-items: center; }
+    .controls select { font-family: inherit; font-size: 13px; background: var(--parchment); border: 1px solid var(--border); padding: 4px 8px; }
+    .controls .sort-toggle { display: flex; gap: 4px; }
+    .controls .sort-toggle button { font-family: inherit; font-size: 12px; background: var(--parchment); border: 1px solid var(--border); padding: 6px 10px; cursor: pointer; color: var(--ink); }
+    .controls .sort-toggle button.active { background: var(--ink); color: var(--parchment-light); }
+
+    /* Header row */
+    .index-grid { display: grid; grid-template-columns: 60px 1fr 140px 1fr 1fr 80px; gap: 14px; align-items: center; padding: 10px 16px; }
+    .index-grid.head { font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-muted); font-weight: 600; border-bottom: 1px solid var(--ink); padding: 12px 16px; }
+    .index-grid .country-cell { display: flex; flex-direction: column; }
+    .index-grid .country-cell .name { font-size: 15px; font-weight: 500; }
+    .index-grid .country-cell .meta { font-size: 11px; color: var(--ink-muted); font-style: italic; }
+    .index-grid .regime { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .index-grid .bar-wrap { position: relative; }
+    .index-grid .bar-track { height: 18px; background: var(--border-subtle); position: relative; }
+    .index-grid .bar-fill { position: absolute; left: 0; top: 0; bottom: 0; }
+    .index-grid .bar-fill.mob { background: var(--mob); }
+    .index-grid .bar-fill.vio { background: var(--vio); }
+    .index-grid .bar-label { position: absolute; right: 6px; top: 1px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink); font-weight: 500; }
+    .index-grid .bar-label.inside { color: var(--parchment-light); }
+    .index-grid .rank { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink-muted); }
+    .index-grid .expand-btn { font-size: 12px; color: var(--highlight); cursor: pointer; text-decoration: underline; text-decoration-style: dotted; }
+    .row-wrap { border-bottom: 1px solid var(--border-subtle); }
+    .row-wrap.selected { background: var(--parchment-light); }
+    .row-wrap.selected .index-grid { border-left: 3px solid var(--ink); padding-left: 13px; }
+
+    /* Expanded detail */
+    .detail { display: none; padding: 22px 28px; background: var(--parchment-light); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border); }
+    .row-wrap.selected .detail { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; }
+    .detail h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-muted); font-weight: 600; margin-bottom: 12px; }
+    .detail .ind { display: grid; grid-template-columns: 1fr 80px 1fr 1fr; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border-subtle); font-size: 12px; }
+    .detail .ind.head { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-muted); font-weight: 600; }
+    .detail .ind .val { font-family: 'JetBrains Mono', monospace; text-align: right; font-size: 11px; color: var(--ink); }
+    .detail .ind .bar { position: relative; height: 12px; }
+    .detail .ind .bar .axis { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
+    .detail .ind .bar .fill { position: absolute; top: 2px; bottom: 2px; }
+    .detail .ind .bar .fill.mob { background: var(--mob); opacity: 0.65; }
+    .detail .ind .bar .fill.vio { background: var(--vio); opacity: 0.65; }
+    .detail .slider-row { padding: 6px 0; }
+    .detail .slider-row .lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-muted); margin-bottom: 2px; }
+    .detail .slider-row .lbl .v { font-family: 'JetBrains Mono', monospace; color: var(--ink); }
+    .detail .slider-row input { width: 100%; accent-color: var(--highlight); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div>
+        <h1>Scenario Risk Index</h1>
+        <div class="subtitle">All 158 countries · sorted by tier · click any row to expand</div>
+      </div>
+      <div class="nav">
+        <a href="index.html">Compare</a>
+        <a href="v06_atlas.html">Atlas</a>
+        <a href="v06_brief.html">Brief</a>
+        <a href="v06_index.html" class="active">Index</a>
+      </div>
+    </header>
+
+    <div class="controls">
+      <input class="search" id="search" type="text" placeholder="Type to filter countries…" autocomplete="off"/>
+      <div class="filter-group">
+        <label>Regime</label>
+        <select id="regime-filter">
+          <option value="">All</option>
+          <option>closed_autocracy</option>
+          <option>electoral_autocracy</option>
+          <option>electoral_democracy</option>
+          <option>liberal_democracy</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Sort by</label>
+        <div class="sort-toggle">
+          <button id="sort-mob" class="active">Mobilization</button>
+          <button id="sort-vio">Violence</button>
+          <button id="sort-combined">Either</button>
+          <button id="sort-name">Name</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="index-grid head">
+      <div>#</div>
+      <div>Country</div>
+      <div>Regime</div>
+      <div>P(Mobilization)</div>
+      <div>P(Violence/Coup)</div>
+      <div></div>
+    </div>
+
+    <div id="rows"></div>
+  </div>
+
+  <script>
+    const ARTIFACT_BASE = './artifacts/';
+    let snapshot, weights, baseRates;
+    let sortMode = 'mob', regimeFilter = '', query = '';
+    let selectedISO = null;
+    const overrides = {};
+
+    async function load() {
+      const [s, w, b] = await Promise.all([
+        fetch(ARTIFACT_BASE + 'country_snapshot.json').then(r => r.json()),
+        fetch(ARTIFACT_BASE + 'weights.json').then(r => r.json()),
+        fetch(ARTIFACT_BASE + 'base_rates.json').then(r => r.json())
+      ]);
+      snapshot = s; weights = w; baseRates = b;
+
+      document.getElementById('search').addEventListener('input', e => { query = e.target.value.toLowerCase().trim(); render(); });
+      document.getElementById('regime-filter').addEventListener('change', e => { regimeFilter = e.target.value; render(); });
+      ['mob','vio','combined','name'].forEach(k => {
+        document.getElementById('sort-'+k).addEventListener('click', () => {
+          sortMode = k;
+          document.querySelectorAll('.sort-toggle button').forEach(b => b.classList.remove('active'));
+          document.getElementById('sort-'+k).classList.add('active');
+          render();
+        });
+      });
+      render();
+    }
+
+    function filteredSorted() {
+      let arr = Object.values(snapshot.countries);
+      if (regimeFilter) arr = arr.filter(c => c.regime_label === regimeFilter);
+      if (query) arr = arr.filter(c => c.name.toLowerCase().includes(query) || c.iso3c.toLowerCase().includes(query));
+      const key = {
+        mob: c => -c.mobilization.probability,
+        vio: c => -c.violence.probability,
+        combined: c => -(c.mobilization.probability + c.violence.probability),
+        name: c => c.name
+      }[sortMode];
+      arr.sort((a, b) => {
+        const av = key(a), bv = key(b);
+        if (typeof av === 'string') return av.localeCompare(bv);
+        return av - bv;
+      });
+      return arr;
+    }
+
+    function render() {
+      const arr = filteredSorted();
+      const rows = document.getElementById('rows');
+      rows.innerHTML = arr.map((c, i) => {
+        const selected = c.iso3c === selectedISO;
+        const mob = c.mobilization.probability, vio = c.violence.probability;
+        const mobW = mob*100, vioW = vio*100;
+        return `
+          <div class="row-wrap ${selected ? 'selected' : ''}" data-iso="${c.iso3c}">
+            <div class="index-grid">
+              <div class="rank">${(i+1).toString().padStart(2, '0')}</div>
+              <div class="country-cell">
+                <div class="name">${c.name}</div>
+                <div class="meta">${c.iso3c} · ${c.region}${c.subregion ? ' · '+c.subregion : ''} · ${c.snapshot_year}</div>
+              </div>
+              <div class="regime">${c.regime_label.replace(/_/g,' ')}</div>
+              <div class="bar-wrap">
+                <div class="bar-track">
+                  <div class="bar-fill mob" style="width:${mobW}%"></div>
+                  <div class="bar-label ${mobW > 50 ? 'inside' : ''}">${(mob*100).toFixed(0)}%</div>
+                </div>
+              </div>
+              <div class="bar-wrap">
+                <div class="bar-track">
+                  <div class="bar-fill vio" style="width:${vioW}%"></div>
+                  <div class="bar-label ${vioW > 50 ? 'inside' : ''}">${(vio*100).toFixed(0)}%</div>
+                </div>
+              </div>
+              <div class="expand-btn">${selected ? 'collapse' : 'expand'}</div>
+            </div>
+            <div class="detail">${selected ? renderDetail(c) : ''}</div>
+          </div>
+        `;
+      }).join('');
+
+      [...rows.querySelectorAll('.row-wrap')].forEach(el => {
+        const iso = el.dataset.iso;
+        el.addEventListener('click', e => {
+          if (e.target.closest('input[type=range]')) return;
+          selectedISO = (selectedISO === iso) ? null : iso;
+          Object.keys(overrides).forEach(k => delete overrides[k]);
+          render();
+        });
+      });
+      // Re-attach slider handlers within rendered detail (if open)
+      if (selectedISO) wireDetail();
+    }
+
+    function renderDetail(c) {
+      const cMob = weights.tiers.mobilization.pooled.coefficients;
+      const cVio = weights.tiers.violence.pooled.coefficients;
+      const ev = weights.features.map(f => {
+        const v = overrides[f] !== undefined ? overrides[f] : (c.features[f]?.value ?? 0);
+        return { f, label: weights.feature_labels[f], v, mob: (cMob[f]||0)*v, vio: (cVio[f]||0)*v };
+      });
+      const maxAbs = Math.max(0.6, ...ev.flatMap(r => [Math.abs(r.mob), Math.abs(r.vio)]));
+      return `
+        <div>
+          <h3>Per-feature contribution (logit units)</h3>
+          <div class="ind head">
+            <div>Indicator</div><div class="val">Value</div><div>Mob</div><div>Vio</div>
+          </div>
+          ${ev.map(r => `
+            <div class="ind">
+              <div>${r.label}</div>
+              <div class="val">${fmtVal(r.f, r.v)}</div>
+              <div class="bar">
+                <div class="axis"></div>
+                ${barFill(r.mob, maxAbs, 'mob')}
+              </div>
+              <div class="bar">
+                <div class="axis"></div>
+                ${barFill(r.vio, maxAbs, 'vio')}
+              </div>
+            </div>`).join('')}
+        </div>
+        <div>
+          <h3>Scenario sliders — move to see ${c.name}'s probability shift live</h3>
+          ${weights.features.map(f => {
+            const r = RANGES[f]; if (!r) return '';
+            const v = overrides[f] !== undefined ? overrides[f] : (c.features[f]?.value ?? 0);
+            return `
+              <div class="slider-row">
+                <div class="lbl"><span>${weights.feature_labels[f]}</span><span class="v">${fmtVal(f, v)}</span></div>
+                <input type="range" min="${r.lo}" max="${r.hi}" step="${r.step}" value="${v}" data-f="${f}"/>
+              </div>`;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function wireDetail() {
+      document.querySelectorAll('.detail input[type=range]').forEach(el => {
+        el.addEventListener('input', e => {
+          overrides[e.target.dataset.f] = parseFloat(e.target.value);
+          // Recompute probabilities for the selected country and update its row's bars
+          const c = snapshot.countries[selectedISO];
+          const mp = computeProb('mobilization', c);
+          const vp = computeProb('violence', c);
+          c.mobilization.probability = mp;
+          c.violence.probability = vp;
+          // Don't re-sort while sliding — just update bars and labels inline
+          const row = document.querySelector(`.row-wrap[data-iso="${selectedISO}"]`);
+          if (row) {
+            const fills = row.querySelectorAll('.bar-fill');
+            fills[0].style.width = (mp*100) + '%';
+            fills[1].style.width = (vp*100) + '%';
+            const labels = row.querySelectorAll('.bar-label');
+            labels[0].textContent = (mp*100).toFixed(0)+'%';
+            labels[1].textContent = (vp*100).toFixed(0)+'%';
+            labels[0].className = 'bar-label' + (mp > 0.5 ? ' inside' : '');
+            labels[1].className = 'bar-label' + (vp > 0.5 ? ' inside' : '');
+            // Also update the contribution bars inside the detail
+            row.querySelector('.detail').innerHTML = renderDetail(c);
+            wireDetail();
+            // Keep focus on the just-moved slider
+            const refocus = row.querySelector(`input[data-f="${e.target.dataset.f}"]`);
+            if (refocus) refocus.focus();
+          }
+        });
+      });
+    }
+
+    function computeProb(tier, c) {
+      const coefs = weights.tiers[tier].pooled.coefficients;
+      let lp = coefs['(Intercept)'] || 0;
+      for (const f of weights.features) {
+        const v = overrides[f] !== undefined ? overrides[f] : (c.features[f]?.value ?? 0);
+        lp += (coefs[f] || 0) * v;
+      }
+      return 1 / (1 + Math.exp(-lp));
+    }
+
+    function barFill(v, maxAbs, klass) {
+      if (v === 0) return '';
+      const w = Math.min(48, Math.abs(v)/maxAbs*48);
+      const style = v > 0
+        ? `left:50%; width:${w}%`
+        : `right:50%; width:${w}%`;
+      return `<div class="fill ${klass}" style="${style}"></div>`;
+    }
+
+    const RANGES = {
+      civil_liberties:{lo:0,hi:1,step:0.01},
+      log_gdp_per_cap:{lo:5,hi:12,step:0.05},
+      loser_consent:{lo:0,hi:4,step:1},
+      conflict_neighbors_count:{lo:0,hi:10,step:1},
+      gdp_growth:{lo:-25,hi:20,step:0.1},
+      cpi_inflation:{lo:-10,hi:200,step:0.5},
+      unemployment:{lo:0,hi:40,step:0.1},
+      political_violence_ord_lag1:{lo:0,hi:4,step:1},
+      log_refugee_outflow:{lo:0,hi:16,step:0.1},
+      coup_proof_fragmentation:{lo:0.5,hi:5,step:0.05}
+    };
+
+    function fmtVal(f, v) {
+      if (v == null) return '—';
+      if (['gdp_growth','cpi_inflation','unemployment'].includes(f)) return (+v).toFixed(1)+'%';
+      if (f === 'civil_liberties') return (+v).toFixed(2);
+      if (['loser_consent','political_violence_ord_lag1','conflict_neighbors_count'].includes(f)) return Math.round(v);
+      return (+v).toFixed(2);
+    }
+
+    load();
+  </script>
+</body>
+</html>

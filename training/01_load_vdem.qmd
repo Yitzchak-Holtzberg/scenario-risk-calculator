@@ -49,20 +49,23 @@ dir.create("../data", showWarnings = FALSE, recursive = TRUE)
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
 
 dbWriteTable(con, "vdem", vdem, overwrite = TRUE)
-dbGetQuery(con, "SELECT COUNT(*) AS rows FROM vdem")
+srs_table(
+  dbGetQuery(con, "SELECT COUNT(*) AS rows FROM vdem"),
+  big_mark = TRUE
+)
 ```
 
 ## Coverage
 
 ```{r}
 #| label: inspect
-dbGetQuery(con, "
+srs_table(dbGetQuery(con, "
   SELECT
     COUNT(DISTINCT country_name) AS countries,
     MIN(year) AS earliest_year,
     MAX(year) AS latest_year
   FROM vdem
-")
+"))
 ```
 
 ## Cuba sanity check
@@ -86,7 +89,11 @@ cuba_recent <- dbGetQuery(con, "
   WHERE country_name = 'Cuba' AND year >= 2015
   ORDER BY year
 ")
-cuba_recent
+srs_table(
+  cuba_recent,
+  digits = 3,
+  caption = "Cuba — selected V-Dem indices, 2015 onward"
+)
 ```
 
 ```{r}

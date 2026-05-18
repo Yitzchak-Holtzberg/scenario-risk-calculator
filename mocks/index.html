@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>v0.6 layout mockups — pick one</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --parchment: #F8F3E8;
+      --parchment-light: #FFFCF5;
+      --ink: #2A2620;
+      --ink-muted: #6B5D4F;
+      --border: #D8CFC0;
+      --border-subtle: #E8E0CF;
+      --mob: #5C7A93;
+      --vio: #8B2E2E;
+      --highlight: #1F3A60;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { background: var(--parchment); color: var(--ink); font-family: 'Source Serif 4', Charter, serif; font-size: 16px; line-height: 1.6; }
+    .page { max-width: 1100px; margin: 0 auto; padding: 56px 40px; }
+    h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }
+    .sub { color: var(--ink-muted); font-size: 15px; font-style: italic; margin-bottom: 36px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--parchment-light); border: 1px solid var(--border-subtle); padding: 28px 24px; text-decoration: none; color: var(--ink); transition: transform 0.15s, border-color 0.15s; display: flex; flex-direction: column; }
+    .card:hover { transform: translateY(-2px); border-color: var(--ink); }
+    .card .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--ink-muted); font-weight: 600; margin-bottom: 6px; }
+    .card h2 { font-size: 28px; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 14px; }
+    .card .preview { background: var(--parchment); border: 1px solid var(--border-subtle); height: 160px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-muted); position: relative; overflow: hidden; }
+    .card .preview svg { width: 100%; height: 100%; }
+    .card p { font-size: 14px; line-height: 1.6; color: var(--ink); margin-bottom: 12px; }
+    .card .footnote { font-size: 12px; color: var(--ink-muted); font-style: italic; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+    .key-take { padding: 24px 28px; background: var(--parchment-light); border: 1px solid var(--border-subtle); border-left: 3px solid var(--highlight); margin-bottom: 36px; font-size: 14px; line-height: 1.6; }
+    .key-take strong { color: var(--ink); }
+    .actions { margin-top: 18px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .actions a { display: inline-block; font-size: 13px; padding: 8px 14px; background: var(--ink); color: var(--parchment-light); text-decoration: none; font-family: inherit; }
+    .actions a.secondary { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+    code { font-family: 'JetBrains Mono', monospace; font-size: 13px; background: var(--parchment); padding: 1px 6px; border: 1px solid var(--border-subtle); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>v0.6 layout candidates</h1>
+    <div class="sub">Three different takes on showing the new two-tier outcome — pick one to ship.</div>
+
+    <div class="key-take">
+      <strong>The data we're laying out:</strong> per country, two probabilities (mobilization + armed violence/coup) each with a 90% CI, plus 10 raw feature values each with two per-tier logit contributions. The current dashboard tries to fit it all into a single vertical layout; these three take different approaches to using horizontal space.
+    </div>
+
+    <div class="grid">
+      <a class="card" href="v06_atlas.html">
+        <div class="kicker">Option 1 · Spatial</div>
+        <h2>Atlas</h2>
+        <div class="preview">
+          <svg viewBox="0 0 200 130" preserveAspectRatio="none">
+            <rect x="20" y="10" width="160" height="100" fill="#FFFCF5" stroke="#D8CFC0"/>
+            <line x1="100" y1="10" x2="100" y2="110" stroke="#D8CFC0" stroke-dasharray="3,3"/>
+            <line x1="20" y1="60" x2="180" y2="60" stroke="#D8CFC0" stroke-dasharray="3,3"/>
+            <circle cx="32" cy="100" r="3" fill="#6B5D4F" fill-opacity="0.5"/>
+            <circle cx="50" cy="95"  r="3" fill="#6B5D4F" fill-opacity="0.5"/>
+            <circle cx="78" cy="78" r="3" fill="#6B5D4F" fill-opacity="0.5"/>
+            <circle cx="62" cy="34" r="5" fill="#1F3A60"/>
+            <circle cx="142" cy="30" r="3" fill="#6B5D4F" fill-opacity="0.5"/>
+            <circle cx="115" cy="50" r="3" fill="#6B5D4F" fill-opacity="0.5"/>
+            <circle cx="155" cy="20" r="3" fill="#6B5D4F" fill-opacity="0.5"/>
+            <circle cx="90" cy="68" r="3" fill="#6B5D4F" fill-opacity="0.5"/>
+            <text x="100" y="125" font-size="8" fill="#6B5D4F" text-anchor="middle" font-family="JetBrains Mono">P(mobilization) →</text>
+            <text x="10" y="60" font-size="8" fill="#6B5D4F" text-anchor="middle" font-family="JetBrains Mono" transform="rotate(-90 10 60)">P(violence) →</text>
+          </svg>
+        </div>
+        <p>A scatter plot of all 158 countries on a (mobilization, violence) plane dominates the screen. Click any dot to drill into a country card. Lets you see <em>where each country sits relative to the rest of the world</em> at a glance — four natural quadrants (stable / mass-mobilization-only / armed-only / both).</p>
+        <div class="footnote">Best for: "show me the global picture, then let me dive into one country."</div>
+      </a>
+
+      <a class="card" href="v06_brief.html">
+        <div class="kicker">Option 2 · Editorial</div>
+        <h2>Brief</h2>
+        <div class="preview">
+          <svg viewBox="0 0 200 130" preserveAspectRatio="none">
+            <text x="14" y="22" font-size="13" font-weight="600" font-family="Source Serif 4" fill="#2A2620">Iran</text>
+            <text x="14" y="32" font-size="6" fill="#6B5D4F" font-style="italic">electoral autocracy · Western Asia</text>
+            <line x1="14" y1="38" x2="186" y2="38" stroke="#2A2620" stroke-width="0.5"/>
+            <rect x="14" y="46" width="80" height="68" fill="#FFFCF5" stroke="#5C7A93" stroke-width="1.5"/>
+            <text x="20" y="58" font-size="5" fill="#6B5D4F">MOBILIZATION</text>
+            <text x="20" y="82" font-size="20" font-weight="600" font-family="Source Serif 4" fill="#5C7A93">7%</text>
+            <text x="20" y="105" font-size="5" fill="#6B5D4F" font-style="italic">90% CI 6–8%</text>
+            <rect x="106" y="46" width="80" height="68" fill="#FFFCF5" stroke="#8B2E2E" stroke-width="1.5"/>
+            <text x="112" y="58" font-size="5" fill="#6B5D4F">ARMED / COUP</text>
+            <text x="112" y="82" font-size="20" font-weight="600" font-family="Source Serif 4" fill="#8B2E2E">69%</text>
+            <text x="112" y="105" font-size="5" fill="#6B5D4F" font-style="italic">90% CI 63–74%</text>
+          </svg>
+        </div>
+        <p>A magazine-style country brief. Big country masthead, twin probability blocks with CI bars side by side as the hero, then a long evidence table showing each feature's per-tier logit contribution as parallel bars (one push-left/right per tier). Sliders + reference class + methodology in a sticky sidebar.</p>
+        <div class="footnote">Best for: "give me everything I should know about <em>this one country</em>, formatted like a research brief."</div>
+      </a>
+
+      <a class="card" href="v06_index.html">
+        <div class="kicker">Option 3 · Tabular</div>
+        <h2>Index</h2>
+        <div class="preview">
+          <svg viewBox="0 0 200 130" preserveAspectRatio="none">
+            <text x="14" y="14" font-size="5" fill="#6B5D4F" font-family="JetBrains Mono">COUNTRY            MOB                 VIO</text>
+            <line x1="10" y1="18" x2="190" y2="18" stroke="#2A2620" stroke-width="0.5"/>
+
+            <text x="14" y="30" font-size="6" font-family="Source Serif 4" fill="#2A2620">Yemen</text>
+            <rect x="62" y="24" width="20" height="7" fill="#5C7A93"/>
+            <rect x="118" y="24" width="62" height="7" fill="#8B2E2E"/>
+
+            <text x="14" y="44" font-size="6" font-family="Source Serif 4" fill="#2A2620">Venezuela</text>
+            <rect x="62" y="38" width="10" height="7" fill="#5C7A93"/>
+            <rect x="118" y="38" width="62" height="7" fill="#8B2E2E"/>
+
+            <text x="14" y="58" font-size="6" font-family="Source Serif 4" fill="#2A2620">Cuba</text>
+            <rect x="62" y="52" width="10" height="7" fill="#5C7A93"/>
+            <rect x="118" y="52" width="28" height="7" fill="#8B2E2E"/>
+
+            <text x="14" y="72" font-size="6" font-family="Source Serif 4" fill="#2A2620">Iran</text>
+            <rect x="62" y="66" width="6" height="7" fill="#5C7A93"/>
+            <rect x="118" y="66" width="44" height="7" fill="#8B2E2E"/>
+
+            <text x="14" y="86" font-size="6" font-family="Source Serif 4" fill="#2A2620">USA</text>
+            <rect x="62" y="80" width="4" height="7" fill="#5C7A93"/>
+            <rect x="118" y="80" width="12" height="7" fill="#8B2E2E"/>
+
+            <text x="14" y="100" font-size="6" font-family="Source Serif 4" fill="#2A2620">Germany</text>
+            <rect x="62" y="94" width="4" height="7" fill="#5C7A93"/>
+            <rect x="118" y="94" width="2" height="7" fill="#8B2E2E"/>
+
+            <text x="14" y="114" font-size="6" font-family="Source Serif 4" fill="#2A2620">Iceland</text>
+            <rect x="62" y="108" width="2" height="7" fill="#5C7A93"/>
+            <rect x="118" y="108" width="1" height="7" fill="#8B2E2E"/>
+          </svg>
+        </div>
+        <p>A sortable, filterable table of every country with twin probability bars (mob | violence) per row. Search by name, filter by regime, sort by either tier. Click any row to expand inline into a detail view with per-feature contribution columns + scenario sliders. Densest information per screen.</p>
+        <div class="footnote">Best for: "show me the rankings, let me scan and compare, then drill in only when something stands out."</div>
+      </a>
+    </div>
+
+    <div style="margin-top: 48px; padding: 20px 24px; background: var(--parchment-light); border: 1px solid var(--border-subtle); font-size: 13px; line-height: 1.7;">
+      <strong>To preview:</strong> these mocks fetch from <code>./artifacts/</code>. Run <code>cd mocks &amp;&amp; python -m http.server 8766</code> then open <code>http://localhost:8766/</code>.
+      <br><br>
+      <strong>Once you pick one:</strong> I'll port the chosen layout into <code>web/index.html</code> (keeping all the existing data plumbing — country picker, scenario slider behavior, Hanke toggle, deploy workflow) and ship it as v0.6.1.
+    </div>
+  </div>
+</body>
+</html>

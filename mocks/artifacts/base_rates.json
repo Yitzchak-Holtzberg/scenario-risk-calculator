@@ -1,0 +1,57 @@
+{
+  "model_version": "unrest-risk-v0.8-mob-lag",
+  "tiers": {
+    "mobilization": {
+      "closed_autocracy": {
+        "regime_code": 0,
+        "n_obs": 261,
+        "n_events": 4,
+        "base_rate": 0.0153
+      },
+      "electoral_autocracy": {
+        "regime_code": 1,
+        "n_obs": 1434,
+        "n_events": 61,
+        "base_rate": 0.0425
+      },
+      "electoral_democracy": {
+        "regime_code": 2,
+        "n_obs": 1224,
+        "n_events": 98,
+        "base_rate": 0.0801
+      },
+      "liberal_democracy": {
+        "regime_code": 3,
+        "n_obs": 1011,
+        "n_events": 63,
+        "base_rate": 0.0623
+      }
+    },
+    "violence": {
+      "closed_autocracy": {
+        "regime_code": 0,
+        "n_obs": 226,
+        "n_events": 20,
+        "base_rate": 0.0885
+      },
+      "electoral_autocracy": {
+        "regime_code": 1,
+        "n_obs": 1099,
+        "n_events": 426,
+        "base_rate": 0.3876
+      },
+      "electoral_democracy": {
+        "regime_code": 2,
+        "n_obs": 1038,
+        "n_events": 195,
+        "base_rate": 0.1879
+      },
+      "liberal_democracy": {
+        "regime_code": 3,
+        "n_obs": 947,
+        "n_events": 19,
+        "base_rate": 0.0201
+      }
+    }
+  }
+}
