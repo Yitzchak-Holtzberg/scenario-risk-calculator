@@ -48,14 +48,31 @@
       color: var(--ink); text-decoration: none;
     }
     .sidebar .brand:hover { color: var(--highlight); }
-    .sidebar .nav { display: flex; flex-direction: column; font-size: 13px; }
-    .sidebar .nav a {
-      color: var(--highlight); text-decoration: none;
-      padding: 6px 0 6px 10px;
-      border-left: 2px solid transparent;
+    .sidebar .nav {
+      display: flex; flex-direction: column; gap: 2px;
+      font-size: 13.5px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-subtle);
     }
-    .sidebar .nav a:hover { color: var(--ink); }
-    .sidebar .nav a.active { color: var(--ink); font-weight: 600; border-left-color: var(--ink); }
+    .sidebar .nav a {
+      color: var(--ink-muted); text-decoration: none;
+      padding: 6px 10px;
+      border-radius: 3px;
+      transition: background 0.12s ease, color 0.12s ease;
+      position: relative;
+    }
+    .sidebar .nav a::before {
+      content: ''; position: absolute;
+      left: 0; top: 8px; bottom: 8px; width: 2px;
+      background: transparent;
+      transition: background 0.12s ease;
+    }
+    .sidebar .nav a:hover {
+      color: var(--ink);
+      background: rgba(31, 58, 96, 0.06);
+    }
+    .sidebar .nav a.active { color: var(--ink); font-weight: 600; }
+    .sidebar .nav a.active::before { background: var(--ink); }
 
     @media (max-width: 720px) {
       body { padding-left: 0; }
