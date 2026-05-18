@@ -334,6 +334,14 @@ dir.create("../web/artifacts", showWarnings = FALSE, recursive = TRUE)
 json_files <- list.files("../artifacts", pattern = "\\.json$", full.names = TRUE)
 file.copy(json_files, "../web/artifacts", overwrite = TRUE)
 cat("Synced", length(json_files), "JSON artifacts to web/artifacts\n")
+
+# Also keep mocks/artifacts in sync IF it exists. Mocks are local-only
+# (untracked) prototypes; we don't auto-create the folder so other devs
+# don't get a useless empty directory.
+if (dir.exists("../mocks/artifacts")) {
+  file.copy(json_files, "../mocks/artifacts", overwrite = TRUE)
+  cat("Synced", length(json_files), "JSON artifacts to mocks/artifacts\n")
+}
 ```
 
 ## Summary
