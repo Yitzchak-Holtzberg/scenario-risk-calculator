@@ -10,11 +10,18 @@ execute:
   message: false
 ---
 
-Pulls annual end-of-year refugee + asylum-seeker counts by country of origin
-from UNHCR's public Refugee Statistics API. Lands as `unhcr` in
-`data/panel.duckdb`. One row per (origin, year) — refugee outflow is the
-origin-side political-stress signal we want, so we aggregate across the
-asylum dimension at the API level.
+Pulls annual end-of-year refugee + asylum-seeker counts from UNHCR's public
+Refugee Statistics API along two dimensions and writes two tables to
+`data/panel.duckdb`:
+
+- `unhcr` — keyed by **country of origin** (one row per origin × year), the
+  outflow side. Refugee outflow is the political-stress signal that v0
+  originally used.
+- `unhcr_inflow` — keyed by **country of asylum** (one row per destination ×
+  year), the inflow side. Needed so we can build *net* outflow in
+  `08_build_panel`, which kills a reverse-causal contamination where
+  large refugee-receiving democracies (USA, Germany) look like Syria
+  on a log scale.
 
 ## Install
 
@@ -38,7 +45,7 @@ library(ggplot2)
 source("_helpers.R")
 ```
 
-## Fetch all origins, all years
+## Fetch all origins, all years (outflow side)
 
 Setting `coo_all=true` without `coa_all=true` makes UNHCR collapse the
 asylum dimension. ~200 origin countries × ~35 years ≈ 7K rows.
@@ -47,24 +54,31 @@ asylum dimension. ~200 origin countries × ~35 years ≈ 7K rows.
 #| label: fetch
 base <- "https://api.unhcr.org/population/v1/population/"
 
-fetch_page <- function(page, page_size = 1000) {
-  request(base) |>
-    req_url_query(coo_all = "true",
-                  yearFrom = 1990,
-                  yearTo   = format(Sys.Date(), "%Y"),
-                  limit    = page_size,
-                  page     = page) |>
+fetch_page <- function(page, page_size = 1000, side = c("coo", "coa")) {
+  side <- match.arg(side)
+  q <- list(yearFrom = 1990,
+            yearTo   = format(Sys.Date(), "%Y"),
+            limit    = page_size,
+            page     = page)
+  q[[paste0(side, "_all")]] <- "true"
+  do.call(req_url_query, c(list(request(base)), q)) |>
     req_perform() |>
     resp_body_json(simplifyVector = TRUE)
 }
 
-first <- fetch_page(1)
-all_rows <- if (first$maxPages > 1) {
-  rest <- lapply(2:first$maxPages, function(p) fetch_page(p)$items)
-  do.call(rbind, c(list(first$items), rest))
-} else first$items
+fetch_all <- function(side) {
+  first <- fetch_page(1, side = side)
+  if (first$maxPages > 1) {
+    rest <- lapply(2:first$maxPages, function(p) fetch_page(p, side = side)$items)
+    do.call(rbind, c(list(first$items), rest))
+  } else first$items
+}
 
-cat("Pages:", first$maxPages, " | Total rows:", nrow(all_rows), "\n")
+all_rows         <- fetch_all("coo")
+all_rows_inflow  <- fetch_all("coa")
+
+cat("Origin-side rows:     ", nrow(all_rows), "\n")
+cat("Destination-side rows:", nrow(all_rows_inflow), "\n")
 ```
 
 ## Tidy
@@ -79,12 +93,20 @@ count_cols <- c("refugees", "asylum_seekers", "returned_refugees",
 
 to_int <- function(x) { x[x == "-"] <- NA; suppressWarnings(as.integer(x)) }
 
-unhcr <- all_rows
-for (col in count_cols) if (col %in% names(unhcr)) unhcr[[col]] <- to_int(unhcr[[col]])
-unhcr$year <- as.integer(unhcr$year)
-unhcr <- unhcr[, c("year", "coo", "coo_iso", "coo_name",
-                   "refugees", "asylum_seekers", "idps", "stateless", "ooc")]
+tidy_side <- function(df, side) {
+  for (col in count_cols) if (col %in% names(df)) df[[col]] <- to_int(df[[col]])
+  df$year <- as.integer(df$year)
+  iso_col <- paste0(side, "_iso")
+  name_col <- paste0(side, "_name")
+  keep <- c("year", side, iso_col, name_col,
+            "refugees", "asylum_seekers", "idps", "stateless", "ooc")
+  df[, intersect(keep, names(df)), drop = FALSE]
+}
+
+unhcr        <- tidy_side(all_rows,        "coo")
+unhcr_inflow <- tidy_side(all_rows_inflow, "coa")
 head(unhcr, 3)
+head(unhcr_inflow, 3)
 ```
 
 ## Write to DuckDB
@@ -92,8 +114,11 @@ head(unhcr, 3)
 ```{r}
 #| label: write
 con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
-dbWriteTable(con, "unhcr", unhcr, overwrite = TRUE)
-dbGetQuery(con, "SELECT COUNT(*) AS rows FROM unhcr")
+dbWriteTable(con, "unhcr",        unhcr,        overwrite = TRUE)
+dbWriteTable(con, "unhcr_inflow", unhcr_inflow, overwrite = TRUE)
+dbGetQuery(con, "SELECT
+  (SELECT COUNT(*) FROM unhcr)        AS origin_rows,
+  (SELECT COUNT(*) FROM unhcr_inflow) AS destination_rows")
 ```
 
 ## Coverage

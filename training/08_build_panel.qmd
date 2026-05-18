@@ -114,7 +114,8 @@ raw <- dbGetQuery(con, "
     -- override with hand-curated IMF Article IV / NGO estimates where they
     -- exist; otherwise fall back to WDI.
     COALESCE(un.unemployment_curated, w.unemployment) AS unemployment,
-    (COALESCE(u.refugees, 0) + COALESCE(u.asylum_seekers, 0)) AS refugee_outflow,
+    (COALESCE(u.refugees, 0)   + COALESCE(u.asylum_seekers, 0))   AS refugee_outflow,
+    (COALESCE(uin.refugees, 0) + COALESCE(uin.asylum_seekers, 0)) AS refugee_inflow,
     f.ffpi_avg,
     pb.effectivenumber   AS coup_proof_fragmentation,
     sf.counterbalancing,
@@ -131,7 +132,8 @@ raw <- dbGetQuery(con, "
   -- (which forecasts unrest in 2026).
   JOIN vdem v       ON c.vdem_id    = v.country_id  AND v.year >= 1995 AND v.year <= 2025
   LEFT JOIN wdi w   ON c.iso3c      = w.iso3c       AND v.year = w.year
-  LEFT JOIN unhcr u ON c.iso3c      = u.coo_iso     AND v.year = u.year
+  LEFT JOIN unhcr        u   ON c.iso3c = u.coo_iso   AND v.year = u.year
+  LEFT JOIN unhcr_inflow uin ON c.iso3c = uin.coa_iso AND v.year = uin.year
   LEFT JOIN fao_annual f         ON v.year  = f.year
   LEFT JOIN pb_counterbalancing pb ON c.iso3c = pb.iso3c AND v.year = pb.year
   LEFT JOIN security_forces sf   ON c.iso3c = sf.iso3c AND v.year = sf.year
@@ -254,8 +256,17 @@ display purposes only — they aren't model inputs.
 
 Two heavy-tailed transforms for cross-country comparability:
 
-- `log_refugee_outflow = log1p(refugee_outflow)` — Afghanistan/Syria 6M
-  vs USA 6K. Log compresses the scale.
+- `log_refugee_outflow = log1p(max(0, refugee_outflow − refugee_inflow))` —
+  **net** outflow, not gross. Built from UNHCR origin- and destination-side
+  counts. The v0 fit used gross outflow and learned a strong positive
+  coefficient because Syria/Afghanistan dominate the high end. Applied to
+  the USA, gross outflow (~4K asylum seekers) was being treated as a
+  weak-but-real instability signal — and because the model has so few
+  active features for established democracies, it dominated the prediction
+  (~+3 on the logit, ~17% violence headline). Switching to net outflow
+  zeros it out for receiving democracies (USA, Germany, Canada, UK) which
+  is the desired semantics: refugee outflow is a *symptom* of instability,
+  not a cause, and rich receiving countries clearly don't have that symptom.
 - `cpi_inflation` is **clipped to [-10, 200]%** — hyperinflation outliers
   (Venezuela 2017, Zimbabwe 2008) would otherwise swing the coefficient.
 
@@ -270,7 +281,8 @@ panel <- raw
 
 # Cross-country log/clip transforms for the heavy-tailed model inputs.
 # (Applied AFTER joining; NA stays NA through these transforms.)
-panel$log_refugee_outflow <- log1p(pmax(panel$refugee_outflow, 0))
+panel$net_refugee_outflow <- pmax(0, panel$refugee_outflow - panel$refugee_inflow)
+panel$log_refugee_outflow <- log1p(panel$net_refugee_outflow)
 panel$cpi_inflation       <- pmin(pmax(panel$cpi_inflation, -10), 200)
 
 # v0.5: lag political_violence_ord by 1 year per country. Concurrent
