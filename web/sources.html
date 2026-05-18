@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sources — Scenario Risk Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --parchment: #F8F3E8;
+      --parchment-light: #FFFCF5;
+      --ink: #2A2620;
+      --ink-muted: #6B5D4F;
+      --ink-faint: #A89B85;
+      --border: #D8CFC0;
+      --border-subtle: #E8E0CF;
+      --highlight: #1F3A60;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--parchment);
+      color: var(--ink);
+      font-family: 'Source Serif 4', Charter, serif;
+      font-size: 15px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    body { padding-left: 220px; min-height: 100vh; }
+
+    .sidebar {
+      position: fixed; top: 18px; left: 18px;
+      width: 184px;
+      padding: 14px 16px;
+      background: var(--parchment-light);
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 6px rgba(42, 38, 32, 0.06);
+      display: flex; flex-direction: column; gap: 14px;
+      z-index: 40;
+    }
+    .sidebar .brand {
+      font-size: 17px; font-weight: 600;
+      letter-spacing: -0.005em; line-height: 1.22;
+      color: var(--ink); text-decoration: none;
+    }
+    .sidebar .brand:hover { color: var(--highlight); }
+    .sidebar .nav { display: flex; flex-direction: column; font-size: 13px; }
+    .sidebar .nav a {
+      color: var(--highlight); text-decoration: none;
+      padding: 6px 0 6px 10px;
+      border-left: 2px solid transparent;
+    }
+    .sidebar .nav a:hover { color: var(--ink); }
+    .sidebar .nav a.active { color: var(--ink); font-weight: 600; border-left-color: var(--ink); }
+
+    @media (max-width: 720px) {
+      body { padding-left: 0; }
+      .sidebar {
+        position: static; width: auto;
+        top: auto; left: auto;
+        border: none; border-bottom: 1.5px solid var(--ink);
+        box-shadow: none;
+        flex-direction: row; flex-wrap: wrap; align-items: center;
+        gap: 16px;
+        padding: 12px 18px;
+      }
+      .sidebar .nav { flex-direction: row; gap: 4px; }
+      .sidebar .nav a {
+        border-left: none; border-bottom: 2px solid transparent;
+        padding: 2px 8px;
+      }
+      .sidebar .nav a.active { border-left: none; border-bottom-color: var(--ink); }
+    }
+
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 24px 28px 40px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    h1 {
+      font-size: 32px; font-weight: 600; letter-spacing: -0.02em;
+      line-height: 1.1; margin-bottom: 6px;
+    }
+    .kicker {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.22em;
+      color: var(--ink-muted); font-weight: 600; display: block;
+      margin-bottom: 6px;
+    }
+    .lede {
+      font-size: 15.5px; color: var(--ink-muted); font-style: italic;
+      max-width: 720px; margin-bottom: 22px;
+      padding-bottom: 14px; border-bottom: 1px solid var(--border);
+    }
+
+    h2 {
+      font-size: 18px; font-weight: 600; letter-spacing: -0.005em;
+      margin-top: 24px; margin-bottom: 6px;
+    }
+    h2 .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: var(--ink-faint); font-weight: 400;
+      margin-left: 8px; letter-spacing: 0;
+    }
+    p { margin-bottom: 10px; max-width: 760px; }
+    a { color: var(--highlight); }
+    a:hover { color: var(--ink); }
+    .source-list {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 4px 18px;
+      margin-top: 4px; margin-bottom: 18px;
+      font-size: 14px;
+    }
+    .source-list dt {
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      color: var(--ink);
+      padding-top: 2px;
+    }
+    .source-list dd {
+      color: var(--ink-muted);
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .source-list dd:last-of-type { border-bottom: none; }
+    .source-list dt:last-of-type { border-bottom: none; }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      background: var(--parchment-light);
+      padding: 1px 4px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="index.html">Scenario Risk Calculator</a>
+    <nav class="nav">
+      <a href="sources.html" class="active">Sources</a>
+      <a href="methodology.html">Methodology</a>
+    </nav>
+  </aside>
+
+  <div class="page">
+    <span class="kicker">Data provenance</span>
+    <h1>Sources</h1>
+    <p class="lede">
+      Every feature in the dashboard traces back to a public, citation-grade
+      dataset. The training pipeline (<code>training/00–13</code>) loads each
+      source into a DuckDB panel; full ETL is in the project repo.
+    </p>
+
+    <h2>Regime &amp; political indicators <span class="tag">V-Dem v16</span></h2>
+    <p>
+      Varieties of Democracy dataset, country-year coverage 1789–2024.
+      Used for <code>civil_liberties</code> (<code>v2x_civlib</code>),
+      <code>loser_consent</code> (<code>v2elaccept_ord</code>),
+      <code>political_violence_ord_lag1</code> (<code>v2caviol_ord</code>),
+      and <code>mass_mobilization_ord_lag1</code> (<code>v2cagenmob_ord</code>).
+      Loaded via the <code>vdemdata</code> R package.
+    </p>
+    <p>
+      Citation: Coppedge et al. (2025), V-Dem Codebook v16,
+      <a href="https://v-dem.net">v-dem.net</a>.
+    </p>
+
+    <h2>Economic indicators <span class="tag">WDI + IMF WEO</span></h2>
+    <p>
+      World Bank World Development Indicators for
+      <code>log_gdp_per_cap</code>, <code>gdp_growth</code>,
+      <code>cpi_inflation</code>, and <code>unemployment</code>. IMF World
+      Economic Outlook backfills forward years and supplies projections for
+      2025+. State-managed economies (Cuba, PRK, Belarus, Venezuela, Eritrea,
+      Turkmenistan, Cambodia, Laos) use hand-curated IMF Article IV estimates
+      that include informal-sector and underemployment.
+    </p>
+    <p>
+      CPI is clipped to <code>[−10, 200]%</code> so hyperinflation outliers
+      (Venezuela 2017, Zimbabwe 2008) don't dominate the fit. Country-years
+      with no real CPI source are imputed from the regional median and flagged
+      with <code>cpi_imputed = 1</code> — those rows are dropped from training
+      but preserved in the dashboard as a data-quality indicator.
+    </p>
+
+    <h2>Conflict events <span class="tag">UCDP GED</span></h2>
+    <p>
+      Uppsala Conflict Data Program Georeferenced Event Dataset for the
+      ≥100-fatality state-based-conflict threshold that defines the violence
+      tier. Also used to derive <code>conflict_neighbors_count</code> (UCDP
+      events ≥100 fatalities in same-region countries, lagged one year).
+    </p>
+
+    <h2>Coup attempts <span class="tag">Cline Center</span></h2>
+    <p>
+      Cline Center Coup d'État Project for coup-attempt events used in the
+      armed-violence outcome label.
+    </p>
+
+    <h2>Mass protests <span class="tag">MMP</span></h2>
+    <p>
+      Mass Mobilization Project (Clark &amp; Regan) for country-defining
+      protest waves of ≥0.1% of population, used in the mobilization-tier
+      outcome label alongside V-Dem's mass-mobilization ordinal.
+    </p>
+
+    <h2>Refugee flows <span class="tag">UNHCR</span></h2>
+    <p>
+      UNHCR Refugee Population Statistics. <code>log_refugee_outflow</code>
+      is log1p of net refugee outflow = (refugees + asylum-seekers originating
+      here) − (refugees + asylum-seekers hosted here). Log-transformed so
+      Afghanistan/Syria (millions) don't dominate the model relative to
+      countries with thousands.
+    </p>
+
+    <h2>Coup-proofing fragmentation <span class="tag">Pilster-Böhmelt</span></h2>
+    <p>
+      Pilster &amp; Böhmelt's "effective number" of separate military forces
+      (parallel guards, presidential security, etc.). Higher = regime
+      fragmented its security apparatus to coup-proof. Counterintuitively,
+      more fragmented = more unrest in the data.
+    </p>
+
+    <h2>Diagnostic-only sources <span class="tag">loaded, unfit</span></h2>
+    <p>
+      The training panel also loads <strong>de Bruin</strong>
+      (counterbalancing / politicization), <strong>Fariss</strong> (latent
+      human-rights), <strong>Polity2</strong>, and <strong>FAO FFPI</strong>
+      (global food-price index). These are kept for analysis but excluded from
+      the fit: Fariss/Polity2 correlate ~0.9 with civil_liberties, de Bruin
+      ends 2010, and FFPI is identical across countries within a year
+      (no cross-sectional variation).
+    </p>
+
+    <h2>External benchmark <span class="tag">ViEWS</span></h2>
+    <p>
+      ViEWS armed-conflict forecasts are loaded as a dashboard comparison row
+      to ground-truth the model's violence-tier predictions against a
+      well-established academic forecasting system.
+    </p>
+
+    <h2>Pending <span class="tag">ACLED</span></h2>
+    <p>
+      Research-tier API access for ACLED event data was requested
+      2026-05-15 and is pending. Current Open-tier endpoint
+      (<code>/api/acled/read</code>) returns 403 for our use case. Once
+      granted, ACLED will supplement UCDP for fine-grained protest and
+      battle-event counts.
+    </p>
+  </div>
+</body>
+</html>

@@ -60,7 +60,9 @@
     .sidebar .brand {
       font-size: 17px; font-weight: 600;
       letter-spacing: -0.005em; line-height: 1.22;
+      color: var(--ink); text-decoration: none;
     }
+    .sidebar .brand:hover { color: var(--highlight); }
     .sidebar .nav {
       display: flex; flex-direction: column;
       font-size: 13px; color: var(--ink-muted);
@@ -506,7 +508,7 @@
 </head>
 <body>
   <aside class="sidebar">
-    <div class="brand">Scenario Risk Calculator</div>
+    <a class="brand" href="index.html">Scenario Risk Calculator</a>
     <div class="country-picker">
       <span class="picker-label">Country</span>
       <div class="picker" id="country-picker">
@@ -517,6 +519,10 @@
         </div>
       </div>
     </div>
+    <nav class="nav">
+      <a href="sources.html">Sources</a>
+      <a href="methodology.html">Methodology</a>
+    </nav>
   </aside>
 
   <div class="page">

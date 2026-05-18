@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Methodology — Scenario Risk Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --parchment: #F8F3E8;
+      --parchment-light: #FFFCF5;
+      --ink: #2A2620;
+      --ink-muted: #6B5D4F;
+      --ink-faint: #A89B85;
+      --border: #D8CFC0;
+      --border-subtle: #E8E0CF;
+      --highlight: #1F3A60;
+      --mob: #5C7A93;
+      --vio: #8B2E2E;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--parchment);
+      color: var(--ink);
+      font-family: 'Source Serif 4', Charter, serif;
+      font-size: 15px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    body { padding-left: 220px; min-height: 100vh; }
+
+    .sidebar {
+      position: fixed; top: 18px; left: 18px;
+      width: 184px;
+      padding: 14px 16px;
+      background: var(--parchment-light);
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 6px rgba(42, 38, 32, 0.06);
+      display: flex; flex-direction: column; gap: 14px;
+      z-index: 40;
+    }
+    .sidebar .brand {
+      font-size: 17px; font-weight: 600;
+      letter-spacing: -0.005em; line-height: 1.22;
+      color: var(--ink); text-decoration: none;
+    }
+    .sidebar .brand:hover { color: var(--highlight); }
+    .sidebar .nav { display: flex; flex-direction: column; font-size: 13px; }
+    .sidebar .nav a {
+      color: var(--highlight); text-decoration: none;
+      padding: 6px 0 6px 10px;
+      border-left: 2px solid transparent;
+    }
+    .sidebar .nav a:hover { color: var(--ink); }
+    .sidebar .nav a.active { color: var(--ink); font-weight: 600; border-left-color: var(--ink); }
+
+    @media (max-width: 720px) {
+      body { padding-left: 0; }
+      .sidebar {
+        position: static; width: auto;
+        top: auto; left: auto;
+        border: none; border-bottom: 1.5px solid var(--ink);
+        box-shadow: none;
+        flex-direction: row; flex-wrap: wrap; align-items: center;
+        gap: 16px;
+        padding: 12px 18px;
+      }
+      .sidebar .nav { flex-direction: row; gap: 4px; }
+      .sidebar .nav a {
+        border-left: none; border-bottom: 2px solid transparent;
+        padding: 2px 8px;
+      }
+      .sidebar .nav a.active { border-left: none; border-bottom-color: var(--ink); }
+    }
+
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 24px 28px 40px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    h1 {
+      font-size: 32px; font-weight: 600; letter-spacing: -0.02em;
+      line-height: 1.1; margin-bottom: 6px;
+    }
+    .kicker {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.22em;
+      color: var(--ink-muted); font-weight: 600; display: block;
+      margin-bottom: 6px;
+    }
+    .lede {
+      font-size: 15.5px; color: var(--ink-muted); font-style: italic;
+      max-width: 720px; margin-bottom: 22px;
+      padding-bottom: 14px; border-bottom: 1px solid var(--border);
+    }
+
+    h2 {
+      font-size: 18px; font-weight: 600; letter-spacing: -0.005em;
+      margin-top: 24px; margin-bottom: 6px;
+    }
+    p { margin-bottom: 10px; max-width: 760px; }
+    a { color: var(--highlight); }
+    a:hover { color: var(--ink); }
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      background: var(--parchment-light);
+      padding: 1px 4px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 2px;
+    }
+
+    .feature-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 18px;
+      font-size: 13.5px;
+    }
+    .feature-table th, .feature-table td {
+      text-align: left;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .feature-table th {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+      color: var(--ink-muted); font-weight: 600;
+      border-bottom-color: var(--ink);
+    }
+    .feature-table .f {
+      font-family: 'JetBrains Mono', monospace; font-size: 12.5px;
+    }
+    .feature-table .c {
+      font-family: 'JetBrains Mono', monospace; font-size: 12.5px;
+      color: var(--ink-muted);
+      white-space: nowrap;
+    }
+    .tier-mob { color: var(--mob); font-weight: 600; }
+    .tier-vio { color: var(--vio); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="index.html">Scenario Risk Calculator</a>
+    <nav class="nav">
+      <a href="sources.html">Sources</a>
+      <a href="methodology.html" class="active">Methodology</a>
+    </nav>
+  </aside>
+
+  <div class="page">
+    <span class="kicker">Model card</span>
+    <h1>Methodology</h1>
+    <p class="lede">
+      A two-tier logistic regression with monotonicity constraints on every
+      coefficient, fit on country-year panel data 1995–2022. The dashboard
+      forecasts unrest in the year after the most recent observed snapshot.
+    </p>
+
+    <h2>Outcome: two tiers, fit separately</h2>
+    <p>
+      The model predicts <strong>two distinct channels of unrest</strong>,
+      each with its own pooled LASSO plus four regime-stratified LASSOs:
+    </p>
+    <p>
+      <span class="tier-mob">Mass mobilization</span> —
+      a country-defining protest wave in the next 12 months. Labelled
+      positive when (a) MMP records a large protest of ≥0.1% of population,
+      or (b) V-Dem's <code>v2cagenmob_ord</code> rates the year ≥4. Routine
+      protest frequency does not count.
+    </p>
+    <p>
+      <span class="tier-vio">Armed violence / coup</span> —
+      a regime-threatening armed event in the next 12 months. Labelled
+      positive when (a) UCDP records ≥100 fatalities in state-based armed
+      conflict, or (b) the Cline coup database records a coup attempt.
+    </p>
+    <p>
+      Both tiers share the same 10 features. The interesting empirical
+      question is whether economic features matter more for armed violence
+      than for mobilization — they should, based on civil-war literature.
+    </p>
+
+    <h2>Features</h2>
+    <p>
+      All 10 features are <strong>raw cross-country levels</strong>, no
+      within-country z-scoring. <code>civil_liberties</code> is the
+      regime-quality channel; regime-type dummies were dropped from the fit
+      because they're collinear with it.
+    </p>
+    <table class="feature-table">
+      <thead>
+        <tr><th>Feature</th><th>Source</th><th>Constraint</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="f">civil_liberties</td><td>V-Dem 0–1</td><td class="c">β ≤ 0</td></tr>
+        <tr><td class="f">log_gdp_per_cap</td><td>log WDI/WEO GDP per capita</td><td class="c">β ≤ 0</td></tr>
+        <tr><td class="f">loser_consent</td><td>V-Dem v2elaccept_ord, 0–4</td><td class="c">β ≤ 0</td></tr>
+        <tr><td class="f">conflict_neighbors_count</td><td>UCDP-derived (lag-1)</td><td class="c">β ≥ 0</td></tr>
+        <tr><td class="f">gdp_growth</td><td>WDI/WEO annual %</td><td class="c">β ≤ 0</td></tr>
+        <tr><td class="f">cpi_inflation</td><td>WDI/IMF chain, clipped [−10, 200]</td><td class="c">β ≥ 0</td></tr>
+        <tr><td class="f">unemployment</td><td>WDI/ILO + curated supplement</td><td class="c">β ≥ 0</td></tr>
+        <tr><td class="f">political_violence_ord_lag1</td><td>V-Dem 0–4, lagged 1 year</td><td class="c">β ≥ 0</td></tr>
+        <tr><td class="f">mass_mobilization_ord_lag1</td><td>V-Dem 0–4, lagged 1 year</td><td class="c">β ≥ 0</td></tr>
+        <tr><td class="f">log_refugee_outflow</td><td>UNHCR log1p net outflow</td><td class="c">β ≥ 0</td></tr>
+        <tr><td class="f">coup_proof_fragmentation</td><td>Pilster-Böhmelt</td><td class="c">β ≥ 0</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Monotonicity constraints</h2>
+    <p>
+      Every coefficient is forced to the sign its substantive interpretation
+      requires. Civil liberties cannot increase modeled unrest; prior-year
+      violence cannot decrease it. Constraints are enforced through
+      <code>glmnet</code>'s lower/upper bound arguments at fit time, not
+      post-hoc — so the LASSO penalty operates in the constrained subspace.
+      This trades a small amount of in-sample fit for guaranteed-coherent
+      counterfactuals when an analyst drags a slider on the dashboard.
+    </p>
+
+    <h2>Lag structure</h2>
+    <p>
+      Both <code>political_violence_ord_lag1</code> and
+      <code>mass_mobilization_ord_lag1</code> are lagged by one year so they
+      don't overlap with the outcome label (which itself includes the
+      current-year V-Dem ordinal). Without the lag the model would trivially
+      "predict" violence by reading violence. <code>conflict_neighbors_count</code>
+      is also lagged because UCDP releases late and same-year neighbor
+      conflict isn't observable in real forecasting.
+    </p>
+
+    <h2>Training filter</h2>
+    <p>
+      Listwise-drop rows where <code>cpi_imputed = 1</code> — country-years
+      with no real CPI source where inflation was region-median imputed.
+      Avoids fitting on synthetic inflation for PRK, pre-2018 Cuba, Somalia,
+      etc. The <code>cpi_imputed</code> flag is preserved as a data-quality
+      indicator in the dashboard, not as a model feature.
+    </p>
+
+    <h2>Train / holdout split</h2>
+    <p>
+      Train on country-years 1995–2022; predict 2023 unrest as the holdout
+      check. The dashboard's "current snapshot" prediction is for the next
+      12 months from the most recent year of observed feature data.
+    </p>
+
+    <h2>Coefficient persistence &amp; uncertainty</h2>
+    <p>
+      Fitted coefficients are persisted with bootstrap-derived empirical
+      covariance so the dashboard can render 90% credible intervals
+      alongside point predictions. The slider-driven scenario UI reads the
+      stored coefficients directly — no model re-fit happens client-side.
+    </p>
+
+    <h2>Versions &amp; provenance</h2>
+    <p>
+      The dashboard footer shows the model artifact key
+      (e.g. <code>unrest-risk-v0.8-mob-lag</code>) and the date it was fitted.
+      Each model version is a frozen export from the training pipeline at
+      <code>training/12_export_artifacts.qmd</code>; the version key in the
+      footer is the load-bearing identifier when comparing forecasts across
+      iterations.
+    </p>
+
+    <h2>Diagnostic features kept but unfit</h2>
+    <p>
+      Several sources are loaded into the training panel for analysis but
+      excluded from the fit: Fariss latent human-rights and Polity2 (both
+      ~0.9 correlated with <code>civil_liberties</code>), de Bruin
+      counterbalancing / politicization (source ends 2010), and FAO FFPI
+      (global food-price index — identical across countries within a year,
+      no cross-sectional variation to exploit).
+    </p>
+  </div>
+</body>
+</html>
