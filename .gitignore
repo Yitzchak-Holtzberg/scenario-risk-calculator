@@ -47,7 +47,6 @@ training/*_cache/
 
 # --- Editors / OS ----------------------------------------------------------
 .vscode/*
-!.vscode/settings.json
 !.vscode/extensions.json
 .idea/
 *.swp
@@ -59,4 +58,3 @@ Thumbs.db
 *.pem
 .env
 .env.local
-.vscode/settings.json
