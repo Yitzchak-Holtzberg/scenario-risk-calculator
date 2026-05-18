@@ -31,34 +31,76 @@
       line-height: 1.55;
       -webkit-font-smoothing: antialiased;
     }
+    body {
+      padding-left: 220px;
+      min-height: 100vh;
+    }
     .num { font-variant-numeric: tabular-nums; }
     .mono { font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace; }
 
     .page {
       max-width: 1520px;
       margin: 0 auto;
-      padding: 18px 36px 48px;
+      padding: 18px 36px 24px;
+      width: 100%;
+      min-width: 0;
     }
 
-    /* ---- Top nav ---- */
-    .top-nav {
-      display: flex; justify-content: space-between; align-items: baseline;
-      padding-bottom: 10px; border-bottom: 1.5px solid var(--ink);
-      margin-bottom: 14px;
+    /* ---- Sidebar (floating left-side card) ---- */
+    .sidebar {
+      position: fixed; top: 18px; left: 18px;
+      width: 184px;
+      padding: 16px 16px 14px;
+      background: var(--parchment-light);
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 6px rgba(42, 38, 32, 0.06);
+      display: flex; flex-direction: column; gap: 16px;
+      z-index: 40;
     }
-    .top-nav .brand { font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
-    .top-nav .nav { font-size: 12px; color: var(--ink-muted); }
-    .top-nav .nav a {
-      color: var(--highlight); text-decoration: none; margin-left: 14px;
-      border-bottom: 1px solid transparent; padding-bottom: 2px;
+    .sidebar .brand {
+      font-size: 17px; font-weight: 600;
+      letter-spacing: -0.005em; line-height: 1.22;
     }
-    .top-nav .nav a.active { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
-    .country-picker { font-size: 13px; display: flex; align-items: baseline; gap: 10px; position: relative; }
+    .sidebar .nav {
+      display: flex; flex-direction: column;
+      font-size: 13px; color: var(--ink-muted);
+    }
+    .sidebar .nav a {
+      color: var(--highlight); text-decoration: none;
+      padding: 6px 0 6px 10px;
+      border-left: 2px solid transparent;
+    }
+    .sidebar .nav a:hover { color: var(--ink); }
+    .sidebar .nav a.active {
+      color: var(--ink); font-weight: 600;
+      border-left-color: var(--ink);
+    }
+    .country-picker { font-size: 13px; display: flex; flex-direction: column; gap: 6px; position: relative; }
     .country-picker .picker-label {
       font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em;
       color: var(--ink-muted); font-weight: 600;
     }
-    .picker { position: relative; min-width: 220px; }
+    @media (max-width: 720px) {
+      body { padding-left: 0; }
+      .sidebar {
+        position: static; width: auto;
+        top: auto; left: auto;
+        border: none; border-bottom: 1.5px solid var(--ink);
+        box-shadow: none;
+        flex-direction: row; flex-wrap: wrap; align-items: center;
+        gap: 16px;
+        padding: 12px 18px;
+      }
+      .sidebar .nav { flex-direction: row; gap: 4px; }
+      .sidebar .nav a {
+        border-left: none; border-bottom: 2px solid transparent;
+        padding: 2px 8px;
+      }
+      .sidebar .nav a.active { border-left: none; border-bottom-color: var(--ink); }
+      .country-picker { margin-left: auto; }
+    }
+    .picker { position: relative; width: 100%; min-width: 0; }
+    .sidebar .picker-panel { min-width: 240px; }
     .picker-button {
       font-family: inherit; font-size: 15px; background: transparent;
       border: none; border-bottom: 1px dashed var(--ink); color: var(--ink);
@@ -104,7 +146,7 @@
     /* ---- Masthead ---- */
     .masthead {
       display: flex; align-items: baseline; justify-content: space-between;
-      gap: 24px; padding-bottom: 10px; margin-bottom: 14px;
+      gap: 24px; padding-bottom: 8px; margin-bottom: 10px;
       border-bottom: 1px solid var(--border);
     }
     .masthead .lead { display: flex; align-items: baseline; gap: 18px; min-width: 0; }
@@ -132,14 +174,14 @@
       display: grid;
       grid-template-columns: 1.15fr 1.15fr 1fr 0.9fr;
       gap: 14px;
-      margin-bottom: 22px;
+      margin-bottom: 14px;
     }
-    @media (max-width: 1180px) {
+    @media (max-width: 1000px) {
       .hero { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 720px) {
       .hero { grid-template-columns: 1fr; }
-      .page { padding: 14px 18px 36px; }
+      .page { padding: 14px 18px 20px; }
     }
     .hero-card {
       background: var(--parchment-light);
@@ -266,7 +308,7 @@
     /* ---- Evidence section ---- */
     .evidence-head {
       display: flex; align-items: baseline; justify-content: space-between;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     .evidence-head .title {
       font-size: 10px; text-transform: uppercase; letter-spacing: 0.22em;
@@ -282,23 +324,32 @@
     }
 
     .evidence {
-      border-top: 1px solid var(--ink);
       border-bottom: 1px solid var(--border);
       background: var(--parchment-light);
     }
     .ev-row {
       display: grid;
-      grid-template-columns: 200px 110px minmax(160px, 1fr) minmax(160px, 1fr) 230px;
+      grid-template-columns: 230px 90px 1fr 1fr 210px;
       gap: 16px;
       align-items: center;
-      padding: 9px 16px;
+      padding: 6px 16px;
       border-bottom: 1px solid var(--border-subtle);
+    }
+    @media (max-width: 1100px) {
+      .ev-row {
+        grid-template-columns: 200px 80px 1fr 1fr 180px;
+        gap: 12px;
+        padding: 9px 12px;
+      }
     }
     .ev-row:last-child { border-bottom: none; }
     .ev-row.head {
+      position: sticky; top: 0; z-index: 10;
       padding-top: 8px; padding-bottom: 8px;
       background: var(--parchment);
+      border-top: 1px solid var(--ink);
       border-bottom: 1px solid var(--border);
+      box-shadow: 0 1px 0 var(--border);
     }
     .ev-row.head > div {
       font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
@@ -356,6 +407,7 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 12.5px; color: var(--ink);
       text-align: right;
+      font-variant-numeric: tabular-nums;
     }
     .ev-row .val.overridden { color: var(--highlight); font-weight: 500; }
     .ev-row .val .unit { color: var(--ink-faint); font-size: 11px; }
@@ -387,7 +439,10 @@
       color: var(--ink);
       line-height: 18px;
       pointer-events: none;
+      font-variant-numeric: tabular-nums;
     }
+    .lane .num-label.mob { color: var(--mob); }
+    .lane .num-label.vio { color: var(--vio); }
     .lane .num-label.zero { color: var(--ink-faint); font-style: italic; }
 
     /* Slider column — inline editor per row */
@@ -435,7 +490,7 @@
 
     /* Footnote */
     .foot {
-      margin-top: 14px;
+      margin-top: 8px;
       font-size: 11.5px; color: var(--ink-muted);
       font-style: italic;
       display: flex; justify-content: space-between; gap: 16px;
@@ -445,27 +500,24 @@
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="top-nav">
-      <div class="brand">Scenario Risk Calculator</div>
-      <div class="country-picker">
-        <span class="picker-label">Country</span>
-        <div class="picker" id="country-picker">
-          <button class="picker-button" type="button" id="picker-button">—</button>
-          <div class="picker-panel">
-            <input class="picker-search" id="picker-search" type="text" placeholder="Type to filter…" autocomplete="off" />
-            <div class="picker-list" id="picker-list"></div>
-          </div>
+  <aside class="sidebar">
+    <div class="brand">Scenario Risk Calculator</div>
+    <div class="country-picker">
+      <span class="picker-label">Country</span>
+      <div class="picker" id="country-picker">
+        <button class="picker-button" type="button" id="picker-button">—</button>
+        <div class="picker-panel">
+          <input class="picker-search" id="picker-search" type="text" placeholder="Type to filter…" autocomplete="off" />
+          <div class="picker-list" id="picker-list"></div>
         </div>
       </div>
-      <div class="nav">
-        <a href="index.html">Compare</a>
-        <a href="v06_atlas.html">Atlas</a>
-        <a href="v06_brief.html" class="active">Brief</a>
-        <a href="v06_index.html">Index</a>
-      </div>
     </div>
+    <nav class="nav">
+      <a href="index.html" class="active">Compare</a>
+    </nav>
+  </aside>
 
+  <div class="page">
     <div class="masthead">
       <div class="lead">
         <span class="kicker">Country brief</span>
@@ -529,10 +581,10 @@
         <div>Indicator</div>
         <div style="text-align:right;">Value</div>
         <div class="sortable col-mob" data-sort="mob" id="sort-mob">
-          Mobilization (logit Δ)
+          Mobilization
         </div>
         <div class="sortable col-vio" data-sort="vio" id="sort-vio">
-          Violence / coup (logit Δ)
+          Violence / coup
         </div>
         <div>Scenario slider</div>
       </div>
@@ -923,7 +975,7 @@
         <div class="axis"></div>
         <div class="mid"></div>
         <div class="bar ${klass}" style="left:${left}; width:${wPct}%"></div>
-        <div class="num-label" style="left:${labelLeft}; transform:${labelTransform};">${sign}${val.toFixed(2)}</div>
+        <div class="num-label ${klass}" style="left:${labelLeft}; transform:${labelTransform};">${sign}${val.toFixed(2)}</div>
       `;
     }
 
