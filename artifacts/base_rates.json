@@ -1,5 +1,5 @@
 {
-  "model_version": "unrest-risk-v0.6-two-tier",
+  "model_version": "unrest-risk-v0.8-mob-lag",
   "tiers": {
     "mobilization": {
       "closed_autocracy": {
@@ -22,9 +22,9 @@
       },
       "liberal_democracy": {
         "regime_code": 3,
-        "n_obs": 1013,
+        "n_obs": 1011,
         "n_events": 63,
-        "base_rate": 0.0622
+        "base_rate": 0.0623
       }
     },
     "violence": {
@@ -48,9 +48,9 @@
       },
       "liberal_democracy": {
         "regime_code": 3,
-        "n_obs": 957,
+        "n_obs": 947,
         "n_events": 19,
-        "base_rate": 0.0199
+        "base_rate": 0.0201
       }
     }
   }

@@ -295,12 +295,21 @@ panel <- panel[order(panel$iso3c, panel$year), ]
 panel$political_violence_ord_lag1 <- ave(panel$political_violence_ord, panel$iso3c,
                                           FUN = function(x) c(NA, x[-length(x)]))
 
-# v0.5 model-input feature set. political_violence_ord swapped for its
-# 1-year lag (kills autocorrelation with the outcome label).
+# v0.8: lag mass_mobilization_ord by 1 year. Concurrent mass_mobilization_ord
+# at year T would leak into the outcome label (which uses V-Dem mob at T+1),
+# but T-1 is a clean 2-year gap. Gives the model a "chronic mobilization
+# potential" signal — without it, countries like Iran that sit at V-Dem 2-3
+# every year look identical to countries with no protest history at all.
+panel$mass_mobilization_ord_lag1 <- ave(panel$mass_mobilization_ord, panel$iso3c,
+                                         FUN = function(x) c(NA, x[-length(x)]))
+
+# v0.8 model-input feature set. Adds mass_mobilization_ord_lag1 to give the
+# mobilization tier a chronic-protest-potential signal it was previously blind to.
 features <- c("civil_liberties", "log_gdp_per_cap", "loser_consent",
               "conflict_neighbors_count",
               "gdp_growth", "cpi_inflation", "unemployment",
               "political_violence_ord_lag1",
+              "mass_mobilization_ord_lag1",
               "log_refugee_outflow", "coup_proof_fragmentation")
 
 cat("v0.4 features (raw levels, ", length(features), " total):\n", sep = "")

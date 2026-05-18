@@ -463,7 +463,7 @@
             <section class="probability two-tier" id="prob-section">
               <div class="tier-block" id="tier-mobilization">
                 <div class="label">Probability of mass mobilization, next 12 months</div>
-                <div class="tier-hint">Protest / demonstration at country-defining scale (≥0.1% of pop or V-Dem v2cagenmob_ord ≥4)</div>
+                <div class="tier-hint">Country-defining protest wave (single event ≥0.1% of pop, or V-Dem v2cagenmob_ord ≥4). Does not count routine protest frequency.</div>
                 <div class="big-number num" id="big-number-mobilization">${fmt(country.mobilization.probability)}</div>
                 <div class="ci">90% CI: <span class="num">${fmt(country.mobilization.ci_lo_90)}</span> – <span class="num">${fmt(country.mobilization.ci_hi_90)}</span></div>
               </div>
@@ -738,6 +738,9 @@
                            "treated as outflow countries because of small political-asylum tails — refugee " +
                            "outflow is a symptom of instability, not a cause.",
       political_violence_ord_lag1: "V-Dem ordinal (0–4) capturing political violence in the PRIOR year. Lagged by 1 year so it's not concurrent with the outcome label.",
+      mass_mobilization_ord_lag1: "V-Dem ordinal (0–4) capturing scale of mass mobilization in the PRIOR year. " +
+                                  "Picks up chronic protest potential — countries that sit at level 2–3 every year " +
+                                  "(Iran, Venezuela) score higher than countries with no protest history.",
       coup_proof_fragmentation: "Pilster-Böhmelt effective-number of military forces. Higher = " +
                                 "more fragmented security sector (coup-proofed); lower = unified."
     };
@@ -755,6 +758,7 @@
       cpi_inflation:            { lo: -10,   hi: 200,  step: 0.5  },
       unemployment:             { lo: 0,     hi: 40,   step: 0.1  },
       political_violence_ord_lag1:   { lo: 0,     hi: 4,    step: 1    },
+      mass_mobilization_ord_lag1:    { lo: 0,     hi: 4,    step: 1    },
       log_refugee_outflow:      { lo: 0,     hi: 16,   step: 0.1  },
       coup_proof_fragmentation: { lo: 0.5,   hi: 5,    step: 0.05 }
     };
@@ -792,7 +796,7 @@
       if (value == null) return '—';
       const pctFeatures = ['gdp_growth', 'cpi_inflation', 'unemployment'];
       const intFeatures = ['conflict_neighbors_count'];
-      const ordinals    = ['political_violence_ord_lag1', 'loser_consent'];
+      const ordinals    = ['political_violence_ord_lag1', 'mass_mobilization_ord_lag1', 'loser_consent'];
       if (pctFeatures.includes(feat_name)) return value.toFixed(2) + '%';
       if (intFeatures.includes(feat_name)) return Math.round(value).toLocaleString();
       if (feat_name === 'civil_liberties') return value.toFixed(2);

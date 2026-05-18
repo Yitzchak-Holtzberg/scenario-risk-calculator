@@ -103,6 +103,49 @@ dbExecute(con, "
 dbGetQuery(con, "SELECT COUNT(*) AS rows FROM panel_labeled")
 ```
 
+## Manual label overrides
+
+Country-years where ground truth from news/events has reached us before
+the upstream sources updated. Each row needs a citation in `source` and a
+plain-language `reason`. Rows here override whatever the source-fusion
+logic would have produced; `manual_label = 1` lets the fit step keep these
+rows in training even when they fall past the standard train cutoff.
+
+Current overrides (see `data/curated/manual_mobilization_labels.csv`):
+
+- **IRN 2025** — Late Dec 2025 – Jan 2026 Grand Bazaar shutdown spread to
+  all 31 provinces. V-Dem 2025 was coded before these events; will likely
+  upgrade to level 4 in the 2027 V-Dem release.
+- **CUB 2024** — Labels the 2025 wave: Cuban Conflict Observatory recorded
+  11,268 protests during 2025, the largest mobilization in Havana since the
+  July 2021 11J wave. V-Dem rated 2025 at level 1, plausibly under-coded
+  given state-managed-economy information access constraints.
+
+```{r}
+#| label: manual-overrides
+manual_labels <- read.csv("../data/curated/manual_mobilization_labels.csv",
+                          stringsAsFactors = FALSE)
+cat("Manual labels file: ", nrow(manual_labels), " row(s)\n", sep = "")
+print(manual_labels[, c("iso3c", "year", "outcome_mobilization", "reason")])
+
+# Add a flag column so the fit step can include these rows in training
+# regardless of the year cutoff.
+dbExecute(con, "ALTER TABLE panel_labeled ADD COLUMN manual_label INTEGER DEFAULT 0")
+
+dbWriteTable(con, "manual_mobilization_labels", manual_labels, overwrite = TRUE)
+dbExecute(con, "
+  UPDATE panel_labeled p
+  SET outcome_mobilization = m.outcome_mobilization,
+      manual_label         = 1
+  FROM manual_mobilization_labels m
+  WHERE p.iso3c = m.iso3c AND p.year = m.year
+")
+
+cat("\nAfter override, manual-label row count: ",
+    dbGetQuery(con, "SELECT COUNT(*) AS n FROM panel_labeled WHERE manual_label = 1")$n,
+    "\n", sep = "")
+```
+
 ## Outcome distributions
 
 ```{r}

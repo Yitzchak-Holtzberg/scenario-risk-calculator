@@ -64,6 +64,7 @@ feature_labels <- as.list(c(
   cpi_inflation               = "Inflation",
   unemployment                = "Unemployment",
   political_violence_ord_lag1 = "Political violence (prior year)",
+  mass_mobilization_ord_lag1  = "Mass mobilization (prior year)",
   log_refugee_outflow         = "Refugee outflow (log)",
   coup_proof_fragmentation    = "Coup-proofing fragmentation"
 ))
@@ -76,6 +77,7 @@ feature_direction <- as.list(c(   # +1 = higher value raises risk, -1 = lowers
   cpi_inflation               = +1,
   unemployment                = +1,
   political_violence_ord_lag1 = +1,
+  mass_mobilization_ord_lag1  = +1,
   log_refugee_outflow         = +1,
   coup_proof_fragmentation    = +1
 ))

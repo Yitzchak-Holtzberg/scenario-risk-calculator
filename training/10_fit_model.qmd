@@ -48,6 +48,7 @@ matter more for `outcome_violence` (armed conflict / coup) than for
 | `cpi_inflation` | WDI/IMF chain, clipped [−10, 200] | β ≥ 0 |
 | `unemployment` | WDI/ILO + curated supplement for state-managed economies | β ≥ 0 |
 | `political_violence_ord_lag1` | V-Dem 0–4, lagged by 1 year | β ≥ 0 |
+| `mass_mobilization_ord_lag1` | V-Dem 0–4, lagged by 1 year — chronic-protest-potential signal | β ≥ 0 |
 | `log_refugee_outflow` | UNHCR log1p | β ≥ 0 |
 | `coup_proof_fragmentation` | Pilster-Böhmelt | β ≥ 0 |
 
@@ -88,6 +89,7 @@ features <- c(
   "conflict_neighbors_count",
   "gdp_growth", "cpi_inflation", "unemployment",
   "political_violence_ord_lag1",
+  "mass_mobilization_ord_lag1",
   "log_refugee_outflow", "coup_proof_fragmentation"
 )
 # v0.4: raw cross-country levels only. No within-country z's. No regime
@@ -99,7 +101,7 @@ features <- c(
 
 needed_cols <- paste(c("iso3c", "year", "regime_type",
                        "outcome_mobilization", "outcome_violence",
-                       "cpi_imputed", features), collapse = ", ")
+                       "cpi_imputed", "manual_label", features), collapse = ", ")
 panel <- dbGetQuery(con, sprintf("SELECT %s FROM panel_labeled", needed_cols))
 dbDisconnect(con, shutdown = TRUE)
 
@@ -123,8 +125,12 @@ build_subsets <- function(outcome_col) {
   fc <- complete.cases(panel[, c("regime_type", outcome_col, features)])
   rc <- panel$cpi_imputed == 0
   comp <- panel[fc & rc, ]
+  # Manual-label rows ride along into training regardless of year — these are
+  # ground-truth events whose canonical source hasn't published yet (see
+  # data/curated/manual_mobilization_labels.csv).
+  in_train <- comp$year <= 2022 | comp$manual_label == 1
   list(
-    train   = comp[comp$year <= 2022, ],
+    train   = comp[in_train, ],
     holdout = comp[comp$year == 2023, ]
   )
 }
@@ -153,10 +159,12 @@ set.seed(20260517)
 
 # Monotonicity constraints in features-vector order.
 # -1 = β ≤ 0 required;  +1 = β ≥ 0 required.
-feature_signs <- c(-1, -1, -1, +1, -1, +1, +1, +1, +1, +1)
+# mass_mobilization_ord_lag1: +1 (more recent mobilization history -> higher risk).
+feature_signs <- c(-1, -1, -1, +1, -1, +1, +1, +1, +1, +1, +1)
 names(feature_signs) <- c("civil_liberties", "log_gdp_per_cap", "loser_consent",
                           "conflict_neighbors_count", "gdp_growth", "cpi_inflation",
                           "unemployment", "political_violence_ord_lag1",
+                          "mass_mobilization_ord_lag1",
                           "log_refugee_outflow", "coup_proof_fragmentation")
 stopifnot(setequal(names(feature_signs), features))
 
@@ -321,7 +329,7 @@ saveRDS(
     ),
     features      = features,
     regime_labels = regime_labels,
-    model_version = "unrest-risk-v0.6-two-tier",
+    model_version = "unrest-risk-v0.8-mob-lag",
     n_bootstrap   = B_bootstrap,
     fitted_at     = Sys.time()
   ),
