@@ -159,14 +159,20 @@ GitHub Pages deploys `web/` automatically on push to `main` (see `.github/workfl
 
 ## Current model state (honest)
 
-- **v0.7.1 Brier skill score (2023 holdout)**:
-  - **Mobilization tier**: **+0.022** (n=144, base rate 14.6%). First time positive since the project started. Modest predictive value — the model adds a small amount of real information beyond the base rate. Still consistent with the literature: protest at 1-year horizon is genuinely hard to predict from structural features alone.
-  - **Armed violence / coup tier**: **+0.624** (n=144, base rate 25.0%). Strong predictive value — up from +0.46 in v0.6 (a 35% absolute improvement). The new ACLED-derived continuous fatality feature gave the model a much richer signal than the V-Dem ordinal lag it complements.
-  - The contrast still validates the two-tier split. Mobilization remains the harder problem; we don't pretend otherwise. But both tiers improved from the ACLED fatality channel: mobilization went from worse-than-baseline (−0.054) to slightly-better-than-baseline (+0.022), and violence got a major lift.
+- **v0.7.2 calibration — time-blocked CV across 2019-2024 outcome years**:
+  - **Mobilization tier**: median BSS **+0.060**, range [−0.040, +0.090], positive in 5 of 6 years. The 2020 outcome (-0.040) reflects COVID-era surge protests that no structural model can predict; the other 5 years all show modest positive skill.
+  - **Armed violence / coup tier**: median BSS **+0.568**, range [+0.459, +0.635], all 6 years positive. Strong, consistent predictive value across years.
+  - The single-year (2024 outcome) point estimates remain mobilization +0.022, violence +0.624 — the time-blocked CV gives an honest distribution around these numbers and reveals 2020 was an unusually difficult year for mobilization. ([artifacts/calibration.json](artifacts/calibration.json) carries the per-year detail.)
 
-- **v0.6 baseline (pre-ACLED) for comparison**:
-  - Mobilization: BSS = −0.054, base rate 11.8%
-  - Violence: BSS = +0.459, base rate 18.0%
+- **Confidence intervals — country-clustered bootstrap (v0.7.2)**:
+  CIs are now ~2× wider than the v0.6 row-bootstrap implied. Country-clustered resampling treats a country's ~30 country-years as one cluster, not 30 independent observations. Cuba's P(violence) CI went from [0.087, 0.158] (width 0.07) to [0.062, 0.206] (width 0.14). The wider intervals are the honest ones.
+
+- **Degenerate strata gated out (v0.7.2)**:
+  Per-regime stratified models are skipped when `n_events < 35`. This drops `closed_autocracy` mobilization (10 events), `closed_autocracy` violence (27), and `liberal_democracy` violence (30). Their predictions fall back to the pooled model. Earlier v0.6 had `liberal_democracy` violence producing near-separation fits with max-vcov entries on the order of 10¹¹ — entirely fixed by the gate.
+
+- **v0.6 baseline (pre-ACLED) for reference**:
+  - Mobilization: BSS = −0.054 (n=144, single-year 2023 holdout, base rate 11.8%)
+  - Violence: BSS = +0.459 (n=122, single-year 2023 holdout, base rate 18.0%)
 - **Face validity restored**: Cuba 34.6% > USA 26.6%. The v0.4.1 inversion (USA 39% > Cuba 32%) is gone because v0.5's monotonicity constraints zero out `civil_liberties`'s sign-flipped contribution (the "more civil liberties → more reported unrest" reporting-bias artifact). Country rankings now match political-risk intuition top to bottom.
 - **`political_violence_ord` is lagged by 1 year**. v0.4 used the concurrent V-Dem violence ordinal as a predictor, but our outcome label includes the V-Dem `v2cagenmob_ord >= 4` fallback for post-2020 years — concurrent violence partly predicts itself. Lagging breaks the autocorrelation.
 - **Monotonicity constraints** force every coefficient to its substantively-justified sign: `civil_liberties ≤ 0`, `cpi_inflation ≥ 0`, `unemployment ≥ 0`, etc. Reporting bias can no longer flip signs. Features that lose their predictive power when forced to the right sign get zeroed out (cpi_inflation, unemployment, civil_liberties, log_gdp_per_cap, loser_consent all sit at β = 0). **This is an honest empirical finding**: at the 1-year horizon, those features don't add predictive value beyond prior political violence — consistent with PITF/Goldstone literature (economic shocks predict 2-3 year horizons).

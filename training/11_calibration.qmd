@@ -217,9 +217,131 @@ ggplot(vio_rel, aes(x = predicted, y = actual)) +
 
 ## Persist calibration results
 
+## Time-blocked cross-validation across multiple holdout years
+
+A single-year holdout (n=144) has substantial sampling variance — the BSS
+point estimate above could be ±0.04 to ±0.06 by chance. To get an honest
+picture, we re-fit the model 6 times: for each holdout outcome year in
+2019-2024, train on every panel year before it and score that one year.
+Report the distribution of BSS across years, not just a point estimate.
+
+The final shipped model (in `fit.rds` / `weights.json`) is still the one
+fit on panel year ≤ 2022 — this CV is purely for honest calibration
+reporting.
+
+```{r}
+#| label: time-blocked-cv-setup
+library(glmnet)
+
+# Re-pull panel with the features list (same as 10_fit_model.qmd)
+features <- fit$features
+
+# Pull a clean panel for the CV runs. cpi_imputed = 0 listwise drop matches 10.
+con2 <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+needed <- paste(c("iso3c", "year", "regime_type",
+                  "outcome_mobilization", "outcome_violence",
+                  "cpi_imputed", "manual_label", features), collapse = ", ")
+panel_cv <- dbGetQuery(con2, sprintf("SELECT %s FROM panel_labeled", needed))
+dbDisconnect(con2, shutdown = TRUE)
+
+# Apply the same missing-indicator zero-fill as 10
+panel_cv$acled_covered_lag1[is.na(panel_cv$acled_covered_lag1)] <- 0L
+panel_cv$log_acled_violent_demo_fat_per_cap_lag1[
+  is.na(panel_cv$log_acled_violent_demo_fat_per_cap_lag1)] <- 0
+panel_cv$log_acled_pv_fat_per_cap_lag1[
+  is.na(panel_cv$log_acled_pv_fat_per_cap_lag1)] <- 0
+
+# Same monotonicity constraints as 10_fit_model.qmd
+feature_signs <- c(-1, -1, -1, +1, -1, +1, +1, +1, +1, +1, +1, +1, +1, 0)
+names(feature_signs) <- features
+
+build_limits_cv <- function(design_cols) {
+  signs <- as.numeric(feature_signs[design_cols])
+  lower <- rep(-Inf, length(signs)); lower[signs == +1] <- 0
+  upper <- rep( Inf, length(signs)); upper[signs == -1] <- 0
+  list(lower = lower, upper = upper)
+}
+
+# Refit + score one fold
+score_fold <- function(outcome_col, holdout_outcome_year) {
+  # Panel year T predicts outcome year T+1.
+  # Holdout outcome year H => holdout panel year = H - 1.
+  # Train: panel year < H - 1, with manual_label ride-alongs.
+  hp <- holdout_outcome_year - 1L
+
+  fc <- complete.cases(panel_cv[, c("regime_type", outcome_col, features)])
+  rc <- panel_cv$cpi_imputed == 0
+  comp <- panel_cv[fc & rc, ]
+
+  train <- comp[(comp$year < hp) | (comp$manual_label == 1 & comp$year != hp), ]
+  test  <- comp[comp$year == hp, ]
+
+  if (nrow(test) < 30 || sum(test[[outcome_col]] == 1) < 3) {
+    return(data.frame(holdout_outcome_year = holdout_outcome_year,
+                      n_holdout = nrow(test), n_events = sum(test[[outcome_col]] == 1),
+                      brier = NA, brier_baseline = NA, brier_skill_score = NA,
+                      base_rate = NA, mean_pred = NA))
+  }
+
+  form <- as.formula(paste(outcome_col, "~", paste(features, collapse = " + ")))
+  mm_tr <- model.matrix(form, train); x_tr <- mm_tr[, -1, drop = FALSE]
+  mm_te <- model.matrix(form, test);  x_te <- mm_te[, -1, drop = FALSE]
+  y_tr  <- train[[outcome_col]]
+  y_te  <- test[[outcome_col]]
+
+  lims <- build_limits_cv(colnames(x_tr))
+  n_events_tr <- sum(y_tr == 1)
+  nfolds <- if (n_events_tr < 30) 5 else 10
+  fit_cv <- cv.glmnet(x_tr, y_tr, family = "binomial",
+                      alpha = 1, nfolds = nfolds,
+                      lower.limits = lims$lower, upper.limits = lims$upper)
+  preds <- as.numeric(predict(fit_cv, newx = x_te, s = "lambda.min", type = "response"))
+
+  base <- mean(y_tr)
+  brier <- mean((preds - y_te)^2)
+  brier_baseline <- mean((base - y_te)^2)
+  data.frame(holdout_outcome_year = holdout_outcome_year,
+             n_holdout = nrow(test), n_events = sum(y_te == 1),
+             brier = round(brier, 4),
+             brier_baseline = round(brier_baseline, 4),
+             brier_skill_score = round(1 - brier / brier_baseline, 4),
+             base_rate = round(base, 4),
+             mean_pred = round(mean(preds), 4))
+}
+```
+
+```{r}
+#| label: time-blocked-cv-run
+holdout_years <- 2019:2024
+cv_mob <- do.call(rbind, lapply(holdout_years, function(y) score_fold("outcome_mobilization", y)))
+cv_vio <- do.call(rbind, lapply(holdout_years, function(y) score_fold("outcome_violence",     y)))
+
+cat("\n=== Time-blocked CV — mobilization tier ===\n")
+print(cv_mob)
+cat("\nMobilization BSS distribution: median =",
+    round(median(cv_mob$brier_skill_score, na.rm = TRUE), 4),
+    "  IQR =",
+    paste(round(quantile(cv_mob$brier_skill_score,
+                         c(0.25, 0.75), na.rm = TRUE), 4), collapse = "  "), "\n")
+
+cat("\n=== Time-blocked CV — violence tier ===\n")
+print(cv_vio)
+cat("\nViolence BSS distribution: median =",
+    round(median(cv_vio$brier_skill_score, na.rm = TRUE), 4),
+    "  IQR =",
+    paste(round(quantile(cv_vio$brier_skill_score,
+                         c(0.25, 0.75), na.rm = TRUE), 4), collapse = "  "), "\n")
+```
+
+## Persist calibration results
+
 ```{r}
 #| label: persist
-saveRDS(list(mobilization = mob_cal, violence = vio_cal),
-        "../data/model/calibration.rds")
-cat("Saved data/model/calibration.rds with both tiers\n")
+saveRDS(list(
+  mobilization = mob_cal,
+  violence     = vio_cal,
+  cv_mobilization = cv_mob,
+  cv_violence     = cv_vio
+), "../data/model/calibration.rds")
+cat("Saved data/model/calibration.rds with both tiers + CV distributions\n")
 ```

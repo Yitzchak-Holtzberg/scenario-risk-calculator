@@ -371,14 +371,41 @@ build_cal_json <- function(c) {
     reliability       = c$reliability
   )
 }
+
+# v0.7.2: also export the time-blocked CV distribution. Per-year BSS values
+# across 2019-2024 outcome years give an honest picture of variability that
+# a single-year holdout estimate hides.
+build_cv_json <- function(cv_df) {
+  list(
+    holdout_outcome_year = as.integer(cv_df$holdout_outcome_year),
+    n_holdout            = as.integer(cv_df$n_holdout),
+    n_events             = as.integer(cv_df$n_events),
+    brier                = as.numeric(cv_df$brier),
+    brier_baseline       = as.numeric(cv_df$brier_baseline),
+    brier_skill_score    = as.numeric(cv_df$brier_skill_score),
+    base_rate            = as.numeric(cv_df$base_rate),
+    mean_pred            = as.numeric(cv_df$mean_pred),
+    summary = list(
+      median_bss = round(median(cv_df$brier_skill_score, na.rm = TRUE), 4),
+      min_bss    = round(min(cv_df$brier_skill_score, na.rm = TRUE), 4),
+      max_bss    = round(max(cv_df$brier_skill_score, na.rm = TRUE), 4),
+      n_folds    = sum(!is.na(cv_df$brier_skill_score))
+    )
+  )
+}
+
 write_json(list(
   model_version = fit$model_version,
   tiers = list(
     mobilization = build_cal_json(calibration_obj$mobilization),
     violence     = build_cal_json(calibration_obj$violence)
+  ),
+  cv = list(
+    mobilization = build_cv_json(calibration_obj$cv_mobilization),
+    violence     = build_cv_json(calibration_obj$cv_violence)
   )
 ), "../artifacts/calibration.json", auto_unbox = TRUE, pretty = TRUE)
-cat("Wrote artifacts/calibration.json\n")
+cat("Wrote artifacts/calibration.json with CV distributions\n")
 ```
 
 ## Sync dashboard artifact copy

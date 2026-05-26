@@ -1,5 +1,5 @@
 {
-  "model_version": "unrest-risk-v0.7.1-acled-fatality",
+  "model_version": "unrest-risk-v0.7.2-cv-clustered",
   "tiers": {
     "mobilization": {
       "closed_autocracy": {

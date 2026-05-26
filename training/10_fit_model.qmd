@@ -289,7 +289,17 @@ build_limits <- function(design_cols) {
 }
 
 # Fit one stratum or pool: returns the same list shape regardless of which.
-fit_lasso <- function(x, y, B) {
+#
+# v0.7.2: country-clustered bootstrap (was row-stratified). A given country
+# contributes ~30 country-years to the training set, all observations of
+# the same underlying political system. Treating those rows as independent
+# in the bootstrap (the previous design) gave optimistic standard errors.
+# Country-clustering resamples whole-country histories instead, which
+# correctly preserves the within-country dependence structure and yields
+# honest CIs that account for the fact that we have ~150 effective
+# observations, not ~3,000.
+fit_lasso <- function(x, y, B, iso3c_vec) {
+  stopifnot(length(iso3c_vec) == length(y))
   lims <- build_limits(colnames(x))
   n_events <- sum(y == 1)
   nfolds   <- if (n_events < 30) 5 else 10
@@ -304,12 +314,23 @@ fit_lasso <- function(x, y, B) {
   coef_names <- rownames(coef(fit_cv, s = "lambda.min"))
   names(coef_full) <- coef_names
 
-  idx_pos <- which(y == 1); idx_neg <- which(y == 0)
+  unique_countries <- unique(iso3c_vec)
+  country_to_rows  <- split(seq_along(iso3c_vec), iso3c_vec)
   boot_coefs <- matrix(NA_real_, nrow = B, ncol = length(coef_full),
                        dimnames = list(NULL, coef_names))
+  n_failed <- 0L
   for (b in seq_len(B)) {
-    rows <- c(sample(idx_pos, length(idx_pos), replace = TRUE),
-              sample(idx_neg, length(idx_neg), replace = TRUE))
+    # Country-clustered resample: draw countries with replacement, then
+    # include all rows for each drawn country. If a country is drawn k
+    # times, its rows appear k times (correct weight, not deduplicated).
+    selected   <- sample(unique_countries, length(unique_countries), replace = TRUE)
+    rows       <- unlist(country_to_rows[selected], use.names = FALSE)
+    # Guard against degenerate draws. glmnet requires at least 2 of each
+    # class to fit a binomial model; we require at least 3 for stability.
+    if (sum(y[rows] == 1) < 3 || sum(y[rows] == 0) < 3) {
+      n_failed <- n_failed + 1L
+      next
+    }
     fit_b <- glmnet(x[rows, , drop = FALSE], y[rows],
                     family = "binomial", alpha = alpha_fit,
                     lambda = lambda_best,
@@ -317,6 +338,11 @@ fit_lasso <- function(x, y, B) {
                     upper.limits = lims$upper)
     boot_coefs[b, ] <- as.numeric(coef(fit_b))
   }
+  if (n_failed > 0) cat(sprintf("    (skipped %d degenerate bootstrap draws)\n", n_failed))
+
+  # Drop NA rows (degenerate draws) before computing covariance.
+  ok_rows    <- complete.cases(boot_coefs)
+  boot_coefs <- boot_coefs[ok_rows, , drop = FALSE]
 
   list(
     fit_cv        = fit_cv,
@@ -328,7 +354,8 @@ fit_lasso <- function(x, y, B) {
     n_train       = nrow(x),
     n_events      = n_events,
     nfolds        = nfolds,
-    n_bootstrap   = B
+    n_bootstrap   = nrow(boot_coefs),
+    bootstrap_type = "country-clustered"
   )
 }
 
@@ -345,19 +372,41 @@ fit_tier <- function(outcome_col) {
   form <- as.formula(paste(outcome_col, "~", paste(features, collapse = " + ")))
 
   # Per-stratum fits
+  #
+  # v0.7.2: gate strata by n_events >= 20 in addition to n_rows >= 30.
+  # Logistic regression with very few positive examples produces
+  # near-perfect-separation fits with massive coefficient magnitudes
+  # (e.g., v0.7.1 liberal_democracy violence: 30 events / 1011 rows,
+  # max |coef| = 42, max var = 19). Such strata aren't usable; better
+  # to skip them and fall back to the pooled model.
   models <- list()
   fit_summary <- data.frame()
+  # v0.7.2: gate at 35 events (not 20). Empirically, n_events = 30
+  # (liberal_democracy violence) still produced a near-separation fit
+  # with max |coef| = 42 and vcov entries on the order of 1e11. 35 is
+  # the working threshold that eliminates the residual degeneracy.
+  N_MIN_EVENTS_STRATUM <- 35L
   for (k in 0:3) {
     stratum <- train[train$regime_type == k, ]
+    n_events_stratum <- sum(stratum[[outcome_col]] == 1, na.rm = TRUE)
     if (nrow(stratum) < 30) {
-      cat(sprintf("  Regime %d (%s): only %d rows — skipping\n",
+      cat(sprintf("  Regime %d (%s): only %d rows — skipping (n_rows gate)\n",
                   k, regime_labels[as.character(k)], nrow(stratum)))
+      next
+    }
+    if (n_events_stratum < N_MIN_EVENTS_STRATUM) {
+      cat(sprintf("  Regime %d (%s): only %d events (< %d) — skipping (n_events gate, falls back to pooled)\n",
+                  k, regime_labels[as.character(k)], n_events_stratum, N_MIN_EVENTS_STRATUM))
       next
     }
     mm <- model.matrix(form, stratum)
     x  <- mm[, -1, drop = FALSE]
     y  <- stratum[[outcome_col]]
-    fit_k <- fit_lasso(x, y, B_bootstrap)
+    # model.matrix may drop rows where any feature is NA — align iso3c to the
+    # rows that survived. (build_subsets already listwise-drops, so this is
+    # belt-and-suspenders.)
+    iso3c_vec <- stratum$iso3c[as.integer(rownames(mm))]
+    fit_k <- fit_lasso(x, y, B_bootstrap, iso3c_vec)
     models[[as.character(k)]] <- fit_k
 
     dev_idx       <- which.min(abs(fit_k$fit_cv$lambda - fit_k$lambda))
@@ -377,7 +426,8 @@ fit_tier <- function(outcome_col) {
   mm_pool <- model.matrix(form, train)
   x_pool  <- mm_pool[, -1, drop = FALSE]
   y_pool  <- train[[outcome_col]]
-  pooled  <- fit_lasso(x_pool, y_pool, B_bootstrap)
+  iso3c_pool <- train$iso3c[as.integer(rownames(mm_pool))]
+  pooled  <- fit_lasso(x_pool, y_pool, B_bootstrap, iso3c_pool)
   pooled$formula <- form
 
   cat("  Pooled coefficients:\n")
@@ -437,7 +487,7 @@ saveRDS(
     ),
     features      = features,
     regime_labels = regime_labels,
-    model_version = "unrest-risk-v0.7.1-acled-fatality",
+    model_version = "unrest-risk-v0.7.2-cv-clustered",
     n_bootstrap   = B_bootstrap,
     fitted_at     = Sys.time()
   ),
