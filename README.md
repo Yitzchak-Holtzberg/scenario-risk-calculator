@@ -214,6 +214,27 @@ These would push the model from "v0 prototype" to "credible v1."
 - **Country-month granularity** — revisit now that ACLED is available; would need monthly aggregates rather than the current annual files
 - **Diagnostic** — emit a "countries never seen in training" list from `10_fit_model.qmd` to surface listwise-deletion damage
 
+## Dashboard views queued for build-out
+
+The current dashboard (`web/index.html`) is one view: country picker → big number + sliders + indicator table. The JSON artifacts already contain enough data for many richer views. All are static HTML + vanilla JS reading the existing artifacts — no new pipeline work required.
+
+| # | View | Effort | Why it's interesting |
+|---|---|---|---|
+| D1 | **World map (choropleth)** | ~½ day | Color countries by P(mob) or P(vio); geographic intuition the picker can't give (Sahel cluster, European low-risk band) |
+| D2 | **2-4 country comparison** | ~½ day | "USA vs Russia — where do they differ on each feature?" |
+| D3 | **Confidence-aware ranking** | ~½ day | Top 25 by point estimate / lower-bound CI (precautionary) / upper-bound CI (worst-case); makes the v0.7.2 wider CIs visible and useful |
+| D4 | **Per-country time series** | ~1 day | Historical trajectory of the headline probability and the feature inputs; shows the lead-up to today's prediction |
+| D5 | **Reference-class scatter** | ~1 day | For the selected country, show the 30 most-similar historical country-years and their actual outcomes ("Cuba 2025 is like {Honduras 2009, Tunisia 2011}; X% had unrest"). PITF/Goldstone framing made tangible. |
+| D6 | **Feature explorer** | ~½ day | Pick a feature (e.g., civil_liberties); plot all countries against it, colored by their prediction; reveals what's driving rankings |
+| D7 | **Calibration / track-record** | ~½ day | Interactive reliability diagrams and the 6-year BSS distribution from time-blocked CV; project's self-assessment visualized |
+| D8 | **Source-attribution "why" view** | ~1-2 days | Click a country; see the UCDP/MMP/ACLED/Cline/V-Dem events that drove its outcome label. Direct receipts. |
+| D9 | **Year-over-year deltas** | ~½ day | Who moved up the rankings? Who moved down? Why? |
+| D10 | **Distribution view** | ~½ day | Histograms of P(mob) and P(vio) across all countries, colored by regime. Anchors intuition for what counts as "high." |
+| D11 | **Disagreement with ViEWS** | ~½ day | Existing ViEWS overlay extended to a "where do we disagree most" view |
+| D12 | **Scenario library** | ~1 day | Prebuilt counterfactuals ("inflation hits 30%", "refugee outflow doubles") with the prediction shift visualized |
+
+Highest immediate impact pair: **D1 + D3** (transforms the dashboard from one-country-at-a-time into a real risk map). Highest pedagogical value pair: **D5 + D7** (most useful for teaching how the model actually works).
+
 ## License
 
 TBD — depends on data-source license compatibility. V-Dem is CC BY 4.0; WDI is CC BY 4.0; UNHCR data is open with attribution; FAO data is CC BY-NC-SA. **ACLED is restrictive (no redistribution).** The repo handles this by gitignoring `data/raw/acled/` and committing only country-year aggregates / derived binary outcome flags to DuckDB and `artifacts/` — never the raw event rows. ACLED granted dashboard-read clearance after the Research-tier API application was denied; the loader reads pre-aggregated country-year xlsx files exported from ACLED's [Aggregated Data](https://acleddata.com/data-export-tool/) interface.
