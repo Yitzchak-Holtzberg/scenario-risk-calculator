@@ -56,30 +56,36 @@ Two tiers; each tier has pooled + per-regime strata.
 ```{r}
 #| label: weights
 feature_labels <- as.list(c(
-  civil_liberties             = "Civil liberties",
-  log_gdp_per_cap             = "GDP per capita",
-  loser_consent               = "Loser consent",
-  conflict_neighbors_count    = "Regional conflict",
-  gdp_growth                  = "GDP growth",
-  cpi_inflation               = "Inflation",
-  unemployment                = "Unemployment",
-  political_violence_ord_lag1 = "Political violence (prior year)",
-  mass_mobilization_ord_lag1  = "Mass mobilization (prior year)",
-  log_refugee_outflow         = "Refugee outflow (log)",
-  coup_proof_fragmentation    = "Coup-proofing fragmentation"
+  civil_liberties                         = "Civil liberties",
+  log_gdp_per_cap                         = "GDP per capita",
+  loser_consent                           = "Loser consent",
+  conflict_neighbors_count                = "Regional conflict",
+  gdp_growth                              = "GDP growth",
+  cpi_inflation                           = "Inflation",
+  unemployment                            = "Unemployment",
+  political_violence_ord_lag1             = "Political violence (prior year)",
+  mass_mobilization_ord_lag1              = "Mass mobilization (prior year)",
+  log_refugee_outflow                     = "Refugee outflow (log)",
+  coup_proof_fragmentation                = "Coup-proofing fragmentation",
+  log_acled_violent_demo_fat_per_cap_lag1 = "ACLED deadly-protest fatalities (prior year)",
+  log_acled_pv_fat_per_cap_lag1           = "ACLED political-violence fatalities (prior year)",
+  acled_covered_lag1                      = "ACLED coverage active (prior year)"
 ))
-feature_direction <- as.list(c(   # +1 = higher value raises risk, -1 = lowers
-  civil_liberties             = -1,
-  log_gdp_per_cap             = -1,
-  loser_consent               = -1,
-  conflict_neighbors_count    = +1,
-  gdp_growth                  = -1,
-  cpi_inflation               = +1,
-  unemployment                = +1,
-  political_violence_ord_lag1 = +1,
-  mass_mobilization_ord_lag1  = +1,
-  log_refugee_outflow         = +1,
-  coup_proof_fragmentation    = +1
+feature_direction <- as.list(c(   # +1 = higher value raises risk, -1 = lowers, 0 = no constraint
+  civil_liberties                         = -1,
+  log_gdp_per_cap                         = -1,
+  loser_consent                           = -1,
+  conflict_neighbors_count                = +1,
+  gdp_growth                              = -1,
+  cpi_inflation                           = +1,
+  unemployment                            = +1,
+  political_violence_ord_lag1             = +1,
+  mass_mobilization_ord_lag1              = +1,
+  log_refugee_outflow                     = +1,
+  coup_proof_fragmentation                = +1,
+  log_acled_violent_demo_fat_per_cap_lag1 = +1,
+  log_acled_pv_fat_per_cap_lag1           = +1,
+  acled_covered_lag1                      = 0
 ))
 
 build_tier_weights <- function(tier) {

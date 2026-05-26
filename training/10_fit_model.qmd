@@ -90,8 +90,34 @@ features <- c(
   "gdp_growth", "cpi_inflation", "unemployment",
   "political_violence_ord_lag1",
   "mass_mobilization_ord_lag1",
-  "log_refugee_outflow", "coup_proof_fragmentation"
+  "log_refugee_outflow", "coup_proof_fragmentation",
+  # v0.7.1: ACLED-derived fatality features at lag 1. Continuous signals
+  # for chronic mobilization and chronic political violence intensity —
+  # richer than the V-Dem 0-4 ordinals they complement. Fatality-anchored,
+  # not event-count-anchored, because deaths are the bias-resistant
+  # currency in event data (see README "Bias note" and 09_label_events.qmd
+  # commentary on media-availability bias).
+  "log_acled_violent_demo_fat_per_cap_lag1",   # chronic deadly-protest signal (mobilization tier)
+  "log_acled_pv_fat_per_cap_lag1",              # chronic political-violence fatality intensity (violence tier)
+  "acled_covered_lag1"                          # missing-indicator co-feature (see below)
 )
+
+# v0.7.1: missing-indicator pattern for the ACLED features.
+# Naive listwise-drop on the ACLED features would lose ~50% of training rows
+# (ACLED's pre-2018 coverage gap drops Latin America / Europe / N. America).
+# Instead we zero-fill the ACLED features in pre-coverage rows and include
+# `acled_covered_lag1` as a co-feature so the LASSO can identify "this is a
+# row where ACLED didn't have data" separately from "this is a row where
+# ACLED had data and saw zero fatalities." The model coefficient on
+# `acled_covered_lag1` effectively absorbs any systematic difference between
+# the two regimes; the ACLED slope features only contribute when covered.
+#
+# This is a standard technique for handling NAs in linear models without
+# discarding rows. The trade-off: it assumes the slope is the same for
+# covered vs. uncovered rows (the *intercept* differs via acled_covered_lag1
+# but not the slope). For our case that's a reasonable approximation given
+# 9-15 features and a regularized LASSO fit.
+
 # v0.4: raw cross-country levels only. No within-country z's. No regime
 # dummies in the pooled formula (civil_liberties is the regime-quality
 # channel). cpi_inflation is clipped at [-10, 200]% in 08; log_refugee_outflow
@@ -104,6 +130,14 @@ needed_cols <- paste(c("iso3c", "year", "regime_type",
                        "cpi_imputed", "manual_label", features), collapse = ", ")
 panel <- dbGetQuery(con, sprintf("SELECT %s FROM panel_labeled", needed_cols))
 dbDisconnect(con, shutdown = TRUE)
+
+# Missing-indicator zero-fill: rows where ACLED hadn't yet covered the
+# country (acled_covered_lag1 = NA / 0) get the slope features set to 0.
+# The co-feature `acled_covered_lag1` (0/1) captures the pre/post-coverage
+# regime change without dropping the row.
+panel$acled_covered_lag1[is.na(panel$acled_covered_lag1)] <- 0L
+panel$log_acled_violent_demo_fat_per_cap_lag1[is.na(panel$log_acled_violent_demo_fat_per_cap_lag1)] <- 0
+panel$log_acled_pv_fat_per_cap_lag1[is.na(panel$log_acled_pv_fat_per_cap_lag1)] <- 0
 
 cat("Total panel rows:", nrow(panel), "\n")
 cat("Rows with non-NA outcome_mobilization:", sum(!is.na(panel$outcome_mobilization)), "\n")
@@ -160,12 +194,20 @@ set.seed(20260517)
 # Monotonicity constraints in features-vector order.
 # -1 = β ≤ 0 required;  +1 = β ≥ 0 required.
 # mass_mobilization_ord_lag1: +1 (more recent mobilization history -> higher risk).
-feature_signs <- c(-1, -1, -1, +1, -1, +1, +1, +1, +1, +1, +1)
+# v0.7.1: ACLED-derived fatality features at +1 (more chronic deadly events -> higher next-year risk).
+# acled_covered_lag1: 0 sign (no constraint) — purely a missing-indicator
+#   co-feature; its coefficient absorbs the systematic intercept shift
+#   between pre-coverage (effectively 0 ACLED) and post-coverage regimes
+#   and could go either direction.
+feature_signs <- c(-1, -1, -1, +1, -1, +1, +1, +1, +1, +1, +1, +1, +1, 0)
 names(feature_signs) <- c("civil_liberties", "log_gdp_per_cap", "loser_consent",
                           "conflict_neighbors_count", "gdp_growth", "cpi_inflation",
                           "unemployment", "political_violence_ord_lag1",
                           "mass_mobilization_ord_lag1",
-                          "log_refugee_outflow", "coup_proof_fragmentation")
+                          "log_refugee_outflow", "coup_proof_fragmentation",
+                          "log_acled_violent_demo_fat_per_cap_lag1",
+                          "log_acled_pv_fat_per_cap_lag1",
+                          "acled_covered_lag1")
 stopifnot(setequal(names(feature_signs), features))
 
 build_limits <- function(design_cols) {
@@ -329,7 +371,7 @@ saveRDS(
     ),
     features      = features,
     regime_labels = regime_labels,
-    model_version = "unrest-risk-v0.8-mob-lag",
+    model_version = "unrest-risk-v0.7.1-acled-fatality",
     n_bootstrap   = B_bootstrap,
     fitted_at     = Sys.time()
   ),

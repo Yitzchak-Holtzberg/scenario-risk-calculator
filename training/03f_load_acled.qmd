@@ -1,0 +1,327 @@
+---
+title: "03f — Load ACLED regional event-aggregated data"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+ACLED Research-tier API access was denied; ACLED support clarified that
+**dashboard read access** (and AI agents reading on the user's behalf) is
+permitted — only programmatic API use is restricted. We pull the six
+**regional weekly+admin1 aggregate files** from the ACLED dashboard's
+"Aggregated Data" page (one per region: Africa, Asia-Pacific, Europe &
+Central Asia, Latin America & Caribbean, Middle East, US & Canada).
+
+Each row in a regional file is a (week × admin1 × event_type ×
+sub_event_type) cell with EVENTS, FATALITIES, and POPULATION_EXPOSURE
+counts. The 950K combined rows are essentially event-level data
+pre-aggregated to a level fine enough that we can roll up however we want.
+
+**Why this replaces the v0.7-rev0 country-year aggregates** (now deleted):
+those files collapsed all sub-event types into a single count, which hid
+the discriminating signal between "country has active civil society"
+(thousands of Peaceful protests) vs. "country had a state-protester
+confrontation episode" (Violent demonstration with fatalities, Excessive
+force against protesters). The regional files preserve `SUB_EVENT_TYPE`
+which lets us build the distinction directly.
+
+**Coverage** (varies by region — ACLED's geographic expansion timeline):
+
+| Region | Coverage starts |
+|---|---|
+| Africa | 1996 |
+| Asia-Pacific (incl. South Asia, SE Asia, Oceania) | 2009-2020 (country-varying) |
+| Middle East | 2014 |
+| Europe & Central Asia | 2017 |
+| Latin America & Caribbean | 2017 |
+| US & Canada | 2019 |
+
+**Files live in `data/raw/acled/regional/`, gitignored.** ACLED's
+no-redistribution rule applies to raw rows; only country-year derived
+aggregates land in DuckDB and only binary outcome flags / continuous
+features land in `artifacts/`.
+
+**Bias note (documented for downstream readers):** event-data sources
+are subject to media-availability bias. Open democracies have more
+journalism covering protests so individual events get coded
+more granularly; closed regimes (PRK, Eritrea, Turkmenistan; partly
+Cuba, partly Iran) have fewer events coded because the news pipeline
+underrepresents them. **Fatalities are the bias-resistant currency** —
+bodies are tracked across regimes more uniformly than events, because
+hospitals, families, and opposition groups document deaths even when
+the state suppresses event-level reports. This pipeline therefore uses
+fatality-based thresholds and features wherever possible, and treats
+event counts as auxiliary (high-event + low-fatality = civil-society
+activity, not regime-threatening mobilization).
+
+## Libraries
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(readxl)
+library(countrycode)
+source("_helpers.R")
+```
+
+## Locate + read all six regional files
+
+```{r}
+#| label: locate-and-read
+acled_dir <- "../data/raw/acled/regional"
+stopifnot(dir.exists(acled_dir))
+
+files <- list.files(acled_dir, pattern = "\\.xlsx$", full.names = TRUE)
+cat("Regional files found:\n")
+print(basename(files))
+stopifnot(length(files) >= 6)
+
+# Each regional file shares the same 13-column schema:
+#   WEEK, REGION, COUNTRY, ADMIN1, EVENT_TYPE, SUB_EVENT_TYPE,
+#   EVENTS, FATALITIES, POPULATION_EXPOSURE, DISORDER_TYPE,
+#   ID, CENTROID_LATITUDE, CENTROID_LONGITUDE
+all_frames <- lapply(files, function(f) {
+  df <- readxl::read_excel(f)
+  cat(sprintf("  %s: %d rows, %d countries\n",
+              basename(f), nrow(df), length(unique(df$COUNTRY))))
+  df
+})
+acled_raw <- do.call(rbind, all_frames)
+
+# Coerce date and extract year (the panel grain).
+acled_raw$WEEK <- as.Date(acled_raw$WEEK)
+acled_raw$year <- as.integer(format(acled_raw$WEEK, "%Y"))
+
+cat(sprintf("\nCombined: %d rows, %d countries, date range %s -> %s\n",
+            nrow(acled_raw), length(unique(acled_raw$COUNTRY)),
+            min(acled_raw$WEEK), max(acled_raw$WEEK)))
+```
+
+## Map country names → iso3c
+
+```{r}
+#| label: iso3c-map
+acled_raw$iso3c <- countrycode::countrycode(
+  acled_raw$COUNTRY, origin = "country.name", destination = "iso3c", warn = FALSE
+)
+
+unmapped <- unique(acled_raw$COUNTRY[is.na(acled_raw$iso3c)])
+cat("Unmapped country names (dropped — typically marine areas, Antarctica):\n")
+print(unmapped)
+
+acled_raw <- acled_raw[!is.na(acled_raw$iso3c), ]
+cat(sprintf("Rows after iso3c map: %d (countries=%d)\n",
+            nrow(acled_raw), length(unique(acled_raw$iso3c))))
+```
+
+## Build country-year aggregates
+
+We aggregate from (week × admin1 × event_type × sub_event_type) up to
+country-year, separately for each sub_event_type that matters
+substantively. The result is a wide table with one row per (iso3c, year)
+and many count/fatality columns — predictable for downstream joins.
+
+```{r}
+#| label: aggregate
+
+# Helper: sum EVENTS and FATALITIES across rows matching a sub-event-type filter
+sum_by <- function(df, subtype_pattern) {
+  subset_df <- df[grepl(subtype_pattern, df$SUB_EVENT_TYPE, fixed = TRUE), ]
+  if (nrow(subset_df) == 0) {
+    return(data.frame(iso3c = character(), year = integer(),
+                      events = integer(), fatalities = integer()))
+  }
+  agg <- aggregate(
+    cbind(events = subset_df$EVENTS, fatalities = subset_df$FATALITIES) ~ iso3c + year,
+    data = subset_df, FUN = sum
+  )
+  agg
+}
+
+# Master grid: every (iso3c, year) present in the data
+grid <- unique(acled_raw[, c("iso3c", "year")])
+grid <- grid[order(grid$iso3c, grid$year), ]
+
+# Helper: left-join an aggregate onto grid, prefix the count/fatality cols
+merge_in <- function(grid, agg, prefix) {
+  if (nrow(agg) == 0) {
+    grid[[paste0("n_", prefix)]] <- 0L
+    grid[[paste0("fat_", prefix)]] <- 0L
+    return(grid)
+  }
+  names(agg)[names(agg) == "events"]    <- paste0("n_",   prefix)
+  names(agg)[names(agg) == "fatalities"] <- paste0("fat_", prefix)
+  out <- merge(grid, agg, by = c("iso3c", "year"), all.x = TRUE)
+  out[[paste0("n_",   prefix)]][is.na(out[[paste0("n_",   prefix)]])] <- 0L
+  out[[paste0("fat_", prefix)]][is.na(out[[paste0("fat_", prefix)]])] <- 0L
+  out
+}
+
+# ----- DEMONSTRATION sub-types (Protests + Riots event_types) -----
+# Peaceful protest:                            "civil society activity" — uses fatalities only as signal
+# Violent demonstration:                        protesters used force or protest turned deadly
+# Protest with intervention:                    state forces actively dispersed/contained
+# Excessive force against protesters:           state response went beyond standard policing
+# Mob violence:                                 disorganized crowd violence (often not anti-regime)
+# Riots:                                        catch-all for any Riot-classified event_type
+
+grid <- merge_in(grid, sum_by(acled_raw, "Peaceful protest"),                  "peaceful_protest")
+grid <- merge_in(grid, sum_by(acled_raw, "Violent demonstration"),             "violent_demo")
+grid <- merge_in(grid, sum_by(acled_raw, "Protest with intervention"),         "protest_intervention")
+grid <- merge_in(grid, sum_by(acled_raw, "Excessive force against protesters"), "excessive_force")
+grid <- merge_in(grid, sum_by(acled_raw, "Mob violence"),                      "mob_violence")
+
+# ----- POLITICAL VIOLENCE sub-types (Battles, Explosions, VAC) -----
+# Battle (state armed clash):                   conventional conflict
+# Air/drone strike, Shelling, Remote IED:       remote violence
+# Attack:                                       targeted attack (mostly insurgent)
+# Civilian targeting (special: a flag, not event_type):
+grid <- merge_in(grid, sum_by(acled_raw, "Armed clash"),         "armed_clash")
+grid <- merge_in(grid, sum_by(acled_raw, "Air/drone strike"),    "air_strike")
+grid <- merge_in(grid, sum_by(acled_raw, "Shelling/artillery"),  "shelling")
+grid <- merge_in(grid, sum_by(acled_raw, "Attack"),              "attack")
+grid <- merge_in(grid, sum_by(acled_raw, "Abduction"),           "abduction")
+grid <- merge_in(grid, sum_by(acled_raw, "Sexual violence"),     "sexual_violence")
+
+# ----- DISORDER_TYPE-level totals (the broadest buckets) -----
+# These match what the country-year aggregate files had — useful as a
+# sanity check that the new method reproduces the old totals.
+dt_agg <- aggregate(
+  cbind(events = acled_raw$EVENTS, fatalities = acled_raw$FATALITIES) ~ iso3c + year + DISORDER_TYPE,
+  data = acled_raw, FUN = sum
+)
+
+dt_pv  <- dt_agg[dt_agg$DISORDER_TYPE == "Political violence", c("iso3c","year","events","fatalities")]
+dt_dem <- dt_agg[dt_agg$DISORDER_TYPE == "Demonstrations",      c("iso3c","year","events","fatalities")]
+
+names(dt_pv)[3:4]  <- c("n_political_violence_events", "fat_political_violence_events")
+names(dt_dem)[3:4] <- c("n_demonstration_events",      "fat_demonstration_events")
+
+grid <- merge(grid, dt_pv,  by = c("iso3c","year"), all.x = TRUE)
+grid <- merge(grid, dt_dem, by = c("iso3c","year"), all.x = TRUE)
+for (col in c("n_political_violence_events", "fat_political_violence_events",
+              "n_demonstration_events", "fat_demonstration_events")) {
+  grid[[col]][is.na(grid[[col]])] <- 0
+}
+
+# ----- Total all-event fatalities (replaces old `n_fatalities` aggregate) -----
+total_fat <- aggregate(
+  cbind(n_events = acled_raw$EVENTS, fatalities = acled_raw$FATALITIES) ~ iso3c + year,
+  data = acled_raw, FUN = sum
+)
+names(total_fat)[3:4] <- c("n_total_events", "fat_total")
+grid <- merge(grid, total_fat, by = c("iso3c","year"), all.x = TRUE)
+grid$n_total_events[is.na(grid$n_total_events)] <- 0
+grid$fat_total[is.na(grid$fat_total)] <- 0
+
+# ----- Geographic concentration: how many distinct admin1 had violent-demos? -----
+# Spread across many provinces vs. one is the country-wide-vs-localized signal.
+adm1_vd <- acled_raw[acled_raw$SUB_EVENT_TYPE == "Violent demonstration" & acled_raw$EVENTS > 0, ]
+if (nrow(adm1_vd) > 0) {
+  adm1_count <- aggregate(ADMIN1 ~ iso3c + year, data = adm1_vd,
+                          FUN = function(x) length(unique(x)))
+  names(adm1_count)[3] <- "n_admin1_violent_demo"
+  grid <- merge(grid, adm1_count, by = c("iso3c","year"), all.x = TRUE)
+} else {
+  grid$n_admin1_violent_demo <- 0L
+}
+grid$n_admin1_violent_demo[is.na(grid$n_admin1_violent_demo)] <- 0L
+
+# ----- Coverage flags -----
+# acled_covered: 1 for any country-year where ACLED has any row (since grid
+# was built from acled_raw, every grid row is covered by construction).
+grid$acled_covered <- 1L
+
+# acled_year_complete: 0 for 2026 (partial-year extract, ~through May)
+ACLED_EXTRACT_YEAR <- 2026L
+grid$acled_year_complete <- as.integer(grid$year < ACLED_EXTRACT_YEAR)
+
+# Order columns predictably
+acled_annual <- grid[order(grid$iso3c, grid$year), ]
+cat(sprintf("\nacled_annual: %d rows × %d columns\n",
+            nrow(acled_annual), ncol(acled_annual)))
+str(acled_annual)
+```
+
+## Write
+
+```{r}
+#| label: write
+con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+dbWriteTable(con, "acled_annual", acled_annual, overwrite = TRUE)
+dbGetQuery(con, "
+  SELECT COUNT(*) AS rows, MIN(year) AS first_year, MAX(year) AS last_year,
+         COUNT(DISTINCT iso3c) AS countries
+  FROM acled_annual
+")
+```
+
+## Coverage timeline by region
+
+```{r}
+#| label: coverage-timeline
+dbGetQuery(con, "
+  SELECT year,
+         COUNT(DISTINCT iso3c) AS n_countries_covered,
+         SUM(n_demonstration_events)        AS total_demos,
+         SUM(n_violent_demo)                AS total_violent_demos,
+         SUM(fat_violent_demo)              AS total_violent_demo_fatalities,
+         SUM(fat_political_violence_events) AS total_pv_fatalities
+  FROM acled_annual
+  GROUP BY year
+  ORDER BY year
+")
+```
+
+## Sanity — canonical mobilization episodes
+
+Confirm `fat_violent_demo` is the discriminating signal that the
+fatalities-only outcome label will key on.
+
+```{r}
+#| label: sanity-mob
+dbGetQuery(con, "
+  SELECT iso3c, year,
+         n_peaceful_protest, n_violent_demo, fat_violent_demo,
+         n_protest_intervention, n_excessive_force, fat_excessive_force
+  FROM acled_annual
+  WHERE (iso3c = 'IRN' AND year BETWEEN 2020 AND 2024)
+     OR (iso3c = 'CUB' AND year BETWEEN 2020 AND 2024)
+     OR (iso3c = 'USA' AND year BETWEEN 2019 AND 2024)
+     OR (iso3c = 'FRA' AND year BETWEEN 2020 AND 2024)
+  ORDER BY iso3c, year
+")
+```
+
+## Sanity — closed-regime censoring is visible
+
+PRK / Eritrea / Turkmenistan should have near-zero coverage, which is
+the censoring problem ACLED can't fix (but does make measurable). Cuba
+2021 11J is a good example: only 1 violent-demo fatality coded, but
+38 protest-with-intervention events flagged → the channel is detecting
+state-protester confrontation, even when fatality count is low.
+
+```{r}
+#| label: sanity-censoring
+dbGetQuery(con, "
+  SELECT iso3c, year, n_peaceful_protest, n_violent_demo, fat_violent_demo,
+         n_protest_intervention, fat_excessive_force
+  FROM acled_annual
+  WHERE iso3c IN ('PRK','ERI','TKM','CUB','BLR','TJK')
+    AND year >= 2020
+  ORDER BY iso3c, year
+")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

@@ -17,10 +17,55 @@ conflict; same number meant different things in different countries).
 The two tiers separate **disruptive mobilization** from
 **regime-threatening violence**.
 
-| Tier | Outcome column | Channels (OR-fused) | What "yes" means |
-|---|---|---|---|
-| 1 | `outcome_mobilization` | MMP per-capita large protest (`n_large_protests >= 1`) OR V-Dem `v2cagenmob_ord >= 4` | People in the streets at country-defining scale: Yellow Vests, BLM, Iran 2022, HK 2019, Tahrir, Iceland 2008 |
-| 2 | `outcome_violence` | UCDP fatalities ≥100 OR Cline Center coup attempt | Regime-threatening violence: armed-conflict deaths or coup attempts |
+**v0.7.1 (revised Phase A): ACLED uses FATALITIES, not event counts.**
+
+The v0.7-rev0 attempt used an event-count threshold on ACLED demonstrations
+(10 per million population). Diagnostic rendering showed that threshold
+catastrophically over-fires on active democracies: Sweden, Japan, Germany,
+Canada, France, USA all flipped to mobilization=1 every year 2019-2024
+because ACLED counts every protest event — a 50-person climate rally
+outside Swedish parliament is "1 event" the same way a million-person
+march in Tehran is. Mobilization base rate in the 2023 holdout jumped from
+11.8% to 63.2% and Brier skill score collapsed from −0.05 to −0.81. That
+threshold rule has been reverted.
+
+**Why fatalities, not events?** ACLED's event-data methodology has known
+media-availability bias: open democracies get more journalism so individual
+events get coded more granularly; closed regimes are under-coded. **Deaths
+are the bias-resistant currency** — bodies are tracked across regimes
+more uniformly than events (hospitals, families, opposition document
+deaths even when state suppresses news reports). Plus, "mobilization that
+turned deadly" is a sharper, more honest outcome than "mobilization
+however measured": Iran 2022 (421 violent-demo fatalities), USA 2020 BLM
+(14 fatalities) are unambiguous; Sweden 2024 (0) is unambiguous. France
+2023 pension protests (0 fatalities) genuinely was a chronic-democracy
+mobilization year, but it falls outside this *deadly mobilization* outcome
+— captured by the V-Dem ord ≥ 4 channel if applicable.
+
+ACLED in this revision provides one new OR-channel per tier:
+
+| Tier | Outcome column | Channels (OR-fused) |
+|---|---|---|
+| 1 | `outcome_mobilization` | MMP per-capita large protest OR V-Dem `v2cagenmob_ord ≥ 4` OR **ACLED violent-demonstration fatalities ≥ 10** |
+| 2 | `outcome_violence` | UCDP fatalities ≥ 100 OR Cline coup attempt OR **ACLED total fatalities ≥ 100** |
+
+**Mobilization threshold rationale (≥ 10 violent-demo fatalities):**
+Iran 2022 (421), Iran 2021 (10), USA 2020 BLM (14) → flagged. Cuba 2021
+11J (1 fatality) → not flagged by this channel but caught by the existing
+MMP-or-V-Dem channels. Sweden / Japan / Germany / chronic-protest
+democracies → never flagged.
+
+**Violence threshold rationale (≥ 100 fatalities):** Same threshold as
+UCDP, so this adds a complementary measurement (different coding pipeline,
+different release cadence) rather than a different threshold. Critically,
+fills UCDP's release-lag gap (UCDP coverage ends 2024; ACLED runs through
+2026-05).
+
+**Pre-coverage country-years** (ACLED hadn't yet started coding the
+country in question — Latin America / Europe / North America pre-2018)
+have NULL ACLED counts. `COALESCE(..., 0)` pulls them to 0, meaning
+"ACLED doesn't flag" — the OR-fusion falls back to MMP / V-Dem / UCDP /
+Cline for those rows. Same pattern as the existing channels.
 
 We keep `unrest_next_year` as a legacy column (OR of both tiers) for
 backwards compatibility with anything that still depends on it.
@@ -58,29 +103,57 @@ dbExecute(con, "
       COALESCE(c.n_realized, 0) + COALESCE(c.n_attempted, 0)   AS coup_flag,
       COALESCE(u.fatalities_best, 0)                            AS ucdp_fatal_next,
       COALESCE(m.n_large_protests, 0)                           AS mmp_large_next,
-      LEAD(mass_mobilization_ord) OVER (PARTITION BY p.iso3c ORDER BY p.year) AS vdem_mob_next
+      LEAD(mass_mobilization_ord) OVER (PARTITION BY p.iso3c ORDER BY p.year) AS vdem_mob_next,
+
+      -- v0.7.1: ACLED next-year channels (fatalities-only).
+      --   acled_violent_demo_fat_next  = violent-demonstration FATALITIES at year+1
+      --   acled_total_fat_next         = total fatalities (all event types) at year+1
+      --   acled_covered_next           = 1 if ACLED was actually covering year+1
+      --   acled_year_complete_next     = 1 if year+1 ended before the ACLED extract
+      -- Event counts (acled_n_*) are deliberately NOT pulled here — they
+      -- were the bias-prone signal that broke v0.7-rev0. We use fatalities
+      -- only as the OR-channel trigger.
+      COALESCE(a.fat_violent_demo, 0)              AS acled_violent_demo_fat_next,
+      COALESCE(a.fat_total, 0)                     AS acled_total_fat_next,
+      COALESCE(a.acled_covered, 0)                 AS acled_covered_next,
+      COALESCE(a.acled_year_complete, 0)           AS acled_year_complete_next
     FROM panel_features p
     LEFT JOIN coups_annual c ON c.iso3c = p.iso3c AND c.year = p.year + 1
     LEFT JOIN ucdp_annual  u ON u.iso3c = p.iso3c AND u.year = p.year + 1
     LEFT JOIN mmp_annual   m ON m.iso3c = p.iso3c AND m.year = p.year + 1
+    LEFT JOIN acled_annual a ON a.iso3c = p.iso3c AND a.year = p.year + 1
   )
   SELECT *,
     -- TIER 1: mass mobilization (protest/demonstration at country-defining scale)
+    -- v0.7.1: third OR-channel = ACLED violent-demonstration FATALITIES ≥ 10.
+    -- Fatalities-only by design — event counts have media-availability bias
+    -- that broke v0.7-rev0 (Sweden, Japan, etc. all flipped to mobilization=1).
     CASE
       WHEN mmp_large_next >= 1
-        OR (vdem_mob_next >= 4 AND year >= 2020)  -- V-Dem fallback for post-MMP years
+        OR (vdem_mob_next >= 4 AND year >= 2020)   -- V-Dem fallback for post-MMP years
+        OR acled_violent_demo_fat_next >= 10        -- ACLED deadly-protest channel
       THEN 1
       WHEN vdem_mob_next IS NULL AND mmp_large_next = 0
-      THEN NULL                                   -- no info about next year
+      THEN NULL                                    -- no info about next year (V-Dem drives this)
       ELSE 0
     END AS outcome_mobilization,
 
     -- TIER 2: regime-threatening violence (armed conflict or coup)
+    -- v0.7.1: third OR-channel = ACLED total fatalities ≥ 100. Same threshold
+    -- as UCDP, so this adds a complementary measurement (different coders,
+    -- different release cadence) rather than a different threshold. Critically
+    -- fills UCDP's release-lag gap (UCDP ends 2024; ACLED runs through 2026).
     CASE
       WHEN coup_flag >= 1
         OR ucdp_fatal_next >= 100
+        OR acled_total_fat_next >= 100
       THEN 1
-      WHEN coup_flag = 0 AND ucdp_fatal_next = 0
+      -- Zero-state = all sources are BELOW their threshold (not strictly = 0).
+      -- Permissive: a country-year with 5 ACLED fatalities and 0 UCDP/coups
+      -- is still no-major-political-violence = 0, not unknown = NULL.
+      -- (The strict = 0 rule shrank the violence holdout from 122 to 76 in
+      -- v0.7.1 testing — bug fixed here.)
+      WHEN coup_flag = 0 AND ucdp_fatal_next < 100 AND acled_total_fat_next < 100
       THEN 0
       ELSE NULL
     END AS outcome_violence,
@@ -90,10 +163,13 @@ dbExecute(con, "
     CASE
       WHEN coup_flag >= 1
         OR ucdp_fatal_next >= 100
+        OR acled_total_fat_next >= 100
         OR mmp_large_next >= 1
         OR (vdem_mob_next >= 4 AND year >= 2020)
+        OR acled_violent_demo_fat_next >= 10
       THEN 1
-      WHEN vdem_mob_next IS NULL AND coup_flag = 0 AND ucdp_fatal_next = 0 AND mmp_large_next = 0
+      WHEN vdem_mob_next IS NULL AND coup_flag = 0 AND ucdp_fatal_next = 0
+        AND mmp_large_next = 0 AND acled_violent_demo_fat_next = 0 AND acled_total_fat_next = 0
       THEN NULL
       ELSE 0
     END AS unrest_next_year
@@ -180,13 +256,34 @@ dbGetQuery(con, "
 #| label: source-contribution
 dbGetQuery(con, "
   SELECT
-    SUM(CASE WHEN coup_flag      >= 1                       THEN 1 ELSE 0 END) AS n_coups,
-    SUM(CASE WHEN ucdp_fatal_next >= 100                    THEN 1 ELSE 0 END) AS n_ucdp,
-    SUM(CASE WHEN mmp_large_next  >= 1                      THEN 1 ELSE 0 END) AS n_mmp,
-    SUM(CASE WHEN vdem_mob_next   >= 4 AND year >= 2020     THEN 1 ELSE 0 END) AS n_vdem_fallback,
+    SUM(CASE WHEN coup_flag                    >= 1                  THEN 1 ELSE 0 END) AS n_coups,
+    SUM(CASE WHEN ucdp_fatal_next              >= 100                THEN 1 ELSE 0 END) AS n_ucdp,
+    SUM(CASE WHEN acled_total_fat_next         >= 100                THEN 1 ELSE 0 END) AS n_acled_violence,
+    SUM(CASE WHEN mmp_large_next               >= 1                  THEN 1 ELSE 0 END) AS n_mmp,
+    SUM(CASE WHEN vdem_mob_next                >= 4 AND year >= 2020 THEN 1 ELSE 0 END) AS n_vdem_fallback,
+    SUM(CASE WHEN acled_violent_demo_fat_next  >= 10                 THEN 1 ELSE 0 END) AS n_acled_mobilization,
     SUM(outcome_mobilization) AS n_mobilization_total,
     SUM(outcome_violence)     AS n_violence_total,
     COUNT(*) AS n_total
+  FROM panel_labeled
+")
+```
+
+### How much does ACLED uniquely contribute vs. the existing channels?
+
+Country-years flagged by ACLED that the prior channels (pre-v0.7) would have
+missed. Honest measure of the marginal information ACLED adds.
+
+```{r}
+#| label: acled-marginal-contribution
+dbGetQuery(con, "
+  SELECT
+    SUM(CASE WHEN acled_violent_demo_fat_next >= 10
+              AND NOT (mmp_large_next >= 1 OR (vdem_mob_next >= 4 AND year >= 2020))
+             THEN 1 ELSE 0 END) AS n_mob_acled_only,
+    SUM(CASE WHEN acled_total_fat_next >= 100
+              AND NOT (coup_flag >= 1 OR ucdp_fatal_next >= 100)
+             THEN 1 ELSE 0 END) AS n_vio_acled_only
   FROM panel_labeled
 ")
 ```

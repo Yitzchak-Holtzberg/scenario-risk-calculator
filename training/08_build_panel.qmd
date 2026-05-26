@@ -107,6 +107,7 @@ raw <- dbGetQuery(con, "
     -- imputation): both WDI and WEO are real published data.
     COALESCE(w.gdp_growth, weo_g.gdp_growth) AS gdp_growth,
     COALESCE(w.gdp_per_cap, weo_pc.gdp_per_cap) AS gdp_per_cap,
+    w.population,
     w.trade_pct_gdp,
     -- Unemployment: WDI ILO modelled estimate by default, but for state-
     -- managed economies (Cuba, Belarus, PRK, Venezuela, etc.) the official
@@ -121,7 +122,29 @@ raw <- dbGetQuery(con, "
     sf.counterbalancing,
     sf.politicization,
     fh.hr_score          AS fariss_hr_score,
-    pol.polity2          AS polity2
+    pol.polity2          AS polity2,
+    -- v0.7.1: ACLED columns from the rewritten 03f loader (regional
+    -- weekly+admin1 source files). The fatality-suffixed columns are the
+    -- bias-resistant signals; the event-count columns are auxiliary (kept
+    -- for the panel display and Phase B feature engineering but NOT used
+    -- as outcome-label triggers in 09 — see 09_label_events.qmd commentary).
+    a.n_peaceful_protest                 AS acled_n_peaceful_protest,
+    a.n_violent_demo                     AS acled_n_violent_demo,
+    a.fat_violent_demo                   AS acled_fat_violent_demo,
+    a.n_protest_intervention             AS acled_n_protest_intervention,
+    a.n_excessive_force                  AS acled_n_excessive_force,
+    a.fat_excessive_force                AS acled_fat_excessive_force,
+    a.n_demonstration_events             AS acled_n_demonstration_events,
+    a.n_political_violence_events        AS acled_n_political_violence_events,
+    a.fat_political_violence_events      AS acled_fat_political_violence_events,
+    a.n_total_events                     AS acled_n_total_events,
+    a.fat_total                          AS acled_fat_total,
+    a.n_admin1_violent_demo              AS acled_n_admin1_violent_demo,
+    -- 1 when ACLED reported any event for this country-year; NULL when the
+    -- country-year is pre-coverage (no row in acled_annual). Downstream
+    -- features built from ACLED stay NA in those rows — listwise-drop policy.
+    COALESCE(a.acled_covered, 0)      AS acled_covered,
+    COALESCE(a.acled_year_complete, 0) AS acled_year_complete
   FROM countries c
   -- v0.4.1: panel goes through 2025. WDI/V-Dem/UNHCR/PB all have 2025
   -- data; UCDP currently ends 2024 so conflict_neighbors_count for 2025
@@ -139,6 +162,7 @@ raw <- dbGetQuery(con, "
   LEFT JOIN security_forces sf   ON c.iso3c = sf.iso3c AND v.year = sf.year
   LEFT JOIN fariss_hr fh         ON c.iso3c = fh.iso3c AND v.year = fh.year
   LEFT JOIN polity5 pol          ON c.iso3c = pol.iso3c AND v.year = pol.year
+  LEFT JOIN acled_annual a         ON c.iso3c = a.iso3c       AND v.year = a.year
   LEFT JOIN imf_inflation imf      ON c.iso3c = imf.iso3c    AND v.year = imf.year
   LEFT JOIN imf_weo weo            ON c.iso3c = weo.iso3c    AND v.year = weo.year
   LEFT JOIN imf_weo_gdp_growth   weo_g  ON c.iso3c = weo_g.iso3c   AND v.year = weo_g.year
@@ -303,8 +327,74 @@ panel$political_violence_ord_lag1 <- ave(panel$political_violence_ord, panel$iso
 panel$mass_mobilization_ord_lag1 <- ave(panel$mass_mobilization_ord, panel$iso3c,
                                          FUN = function(x) c(NA, x[-length(x)]))
 
+# v0.7.1: ACLED-derived per-capita features for downstream feature
+# engineering. We compute these even though the v0.7 fit doesn't yet use
+# them, because (a) the regional dataset is rich enough to support a
+# Phase B feature pass, and (b) having them in the panel makes it cheap
+# to add to the model later without re-rendering 03f/08.
+#
+# Why fatality-anchored, not event-count-anchored?
+# Event counts are subject to media-availability bias (open democracies
+# get more news coverage so more events get coded; closed regimes are
+# under-coded). Fatalities are the bias-resistant currency because deaths
+# are tracked across regimes more uniformly. See README "Bias note" and
+# 03f's commentary for full discussion.
+#
+# Coverage policy: features are NA where acled_covered = 0 (pre-coverage
+# country-year — no ACLED row) OR where population is NA. Same listwise-drop
+# semantics as every other model-input feature in this pipeline. Pre-coverage
+# rows do NOT get zero-imputed — that would teach the model that pre-2018
+# Argentina had no fatalities, which is false (ACLED just hadn't started
+# coding it).
+panel$acled_violent_demo_fat_per_m <- ifelse(
+  panel$acled_covered == 1L & !is.na(panel$population),
+  panel$acled_fat_violent_demo / panel$population * 1e6,
+  NA_real_
+)
+panel$acled_pv_fat_per_m <- ifelse(
+  panel$acled_covered == 1L & !is.na(panel$population),
+  panel$acled_fat_political_violence_events / panel$population * 1e6,
+  NA_real_
+)
+panel$acled_total_fat_per_m <- ifelse(
+  panel$acled_covered == 1L & !is.na(panel$population),
+  panel$acled_fat_total / panel$population * 1e6,
+  NA_real_
+)
+
+# log1p-transformed lag-1 versions. Heavy-tailed (Syria/Ukraine fatalities
+# vs. peaceful democracies near zero), so log compresses the long tail for
+# cross-country comparability. Lagged by 1 year so they're available as
+# predictors at fit time.
+panel$log_acled_violent_demo_fat_per_cap_lag1 <- ave(
+  log1p(panel$acled_violent_demo_fat_per_m), panel$iso3c,
+  FUN = function(x) c(NA, x[-length(x)])
+)
+panel$log_acled_pv_fat_per_cap_lag1 <- ave(
+  log1p(panel$acled_pv_fat_per_m), panel$iso3c,
+  FUN = function(x) c(NA, x[-length(x)])
+)
+panel$log_acled_total_fat_per_cap_lag1 <- ave(
+  log1p(panel$acled_total_fat_per_m), panel$iso3c,
+  FUN = function(x) c(NA, x[-length(x)])
+)
+
+# Coverage flag at lag-1 — useful for the eventual Heckman selection model
+# (Phase C). 0 = ACLED wasn't covering this country last year.
+panel$acled_covered_lag1 <- ave(panel$acled_covered, panel$iso3c,
+                                 FUN = function(x) c(NA, x[-length(x)]))
+
 # v0.8 model-input feature set. Adds mass_mobilization_ord_lag1 to give the
 # mobilization tier a chronic-protest-potential signal it was previously blind to.
+#
+# v0.7 (Phase A): ACLED-derived features (`log_acled_demos_per_cap_lag1`,
+# `log_acled_fatalities_per_cap_lag1`, `acled_covered_lag1`) are BUILT in
+# this notebook and persisted in `panel_features`, but are deliberately
+# NOT in the model fit yet. ACLED's pre-2018 coverage gap would listwise-drop
+# ~50% of training rows if these features entered the `complete.cases` filter
+# in 10. Phase A.5 / Phase B will decide on a missing-value strategy (NA fill
+# with co-feature, fallback to V-Dem ordinal, etc.) and add them to the fit
+# with before/after BSS comparison. The features sit ready in the panel.
 features <- c("civil_liberties", "log_gdp_per_cap", "loser_consent",
               "conflict_neighbors_count",
               "gdp_growth", "cpi_inflation", "unemployment",
@@ -325,6 +415,21 @@ y2024_na_any <- y2024[!complete.cases(y2024[, features]), c("iso3c", "name")]
 print(y2024_na_any)
 cat("\nv0.4 feature summary across all years (cross-country distribution):\n")
 print(summary(panel[, features]))
+
+# v0.7 (Phase A): ACLED-derived feature coverage diagnostic. These are not
+# in `features` yet (see comment above) but worth surfacing now so we know
+# what the training-set hit would be if/when we add them.
+cat("\nv0.7.1 ACLED-derived feature coverage:\n")
+print(c(
+  log_acled_violent_demo_fat_per_cap_lag1 = sum(!is.na(panel$log_acled_violent_demo_fat_per_cap_lag1)),
+  log_acled_pv_fat_per_cap_lag1           = sum(!is.na(panel$log_acled_pv_fat_per_cap_lag1)),
+  log_acled_total_fat_per_cap_lag1        = sum(!is.na(panel$log_acled_total_fat_per_cap_lag1)),
+  acled_covered_lag1_yes                  = sum(panel$acled_covered_lag1 == 1L, na.rm = TRUE),
+  total_panel_rows                        = nrow(panel)
+))
+cat("\nACLED coverage by year (post-2015, for sanity):\n")
+print(aggregate(acled_covered ~ year, data = panel, FUN = sum,
+                subset = panel$year >= 2015))
 ```
 
 ## Write the panel

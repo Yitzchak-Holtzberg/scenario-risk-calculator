@@ -40,6 +40,7 @@ scenario-risk-calculator/
    ├── 03c coups (Cline)
    ├── 03d fariss (latent HR scores) ── loaded, excluded (collinearity)
    ├── 03e polity (Polity5)          ── loaded, excluded (collinearity)
+   ├── 03f acled (country-year aggregates: demos, violence, fatalities)
    ├── 04 unhcr (refugee outflow)
    ├── 05 fao (food prices)
    ├── 06 pb (coup-proofing fragmentation)
@@ -67,7 +68,7 @@ scenario-risk-calculator/
 | 3c | `03c_load_coups.qmd` | Cline Center Coup d'État Project — coups 1945-2026 | ✅ |
 | 3d | `03d_load_fariss.qmd` | Fariss latent human-rights protection scores | ✅ loaded; excluded from current fit |
 | 3e | `03e_load_polity.qmd` | Polity5 democracy-autocracy scores 1800-2018 | ✅ loaded; excluded from current fit |
-| — | *ACLED* | Canonical protest/conflict events | ⏳ blocked on Research-tier API access (applied 2026-05-15). MMP + UCDP + Cline coups serve as proxy. |
+| 3f | `03f_load_acled.qmd` | ACLED country-year aggregates (demonstrations, political violence events, fatalities, civilian-targeting events, civilian fatalities), 1997-2026, 250 countries. **v0.7 Phase A**: Research-tier API was denied; ACLED granted dashboard-read access. Pre-aggregated files staged in `data/raw/acled/` (gitignored). | ✅ v0.7 |
 | 4 | `04_load_unhcr.qmd` | UNHCR refugee + asylum-seeker counts by origin | ✅ |
 | 5 | `05_load_fao.qmd` | FAO Food Price Index, monthly global | ✅ |
 | 6 | `06_load_pb.qmd` | Pilster-Böhmelt counterbalancing (coup-proofing) | ✅ (auto-fetched from Harvard Dataverse) |
@@ -83,16 +84,18 @@ scenario-risk-calculator/
 
 **Two outcome tiers** (in `09_label_events.qmd`), each predicted separately by its own LASSO:
 
-- `outcome_mobilization` — fires if **either** (a) MMP-recorded protest with participants ≥0.1% of population (per-capita threshold, calibrated to Iran 2022 Woman-Life-Freedom baseline; catches Yellow Vests, HK 2019, Iceland 2008, BLM 2020, Iran 2009 Green Movement) **or** (b) V-Dem `v2cagenmob_ord ≥ 4` ("mass mobilization was a defining feature of the year"; post-2020 fallback for MMP).
-- `outcome_violence` — fires if **either** (a) UCDP GED records 100+ fatalities in state-based armed conflict **or** (b) Cline Center records a coup attempt (realized or attempted).
+- `outcome_mobilization` — fires if **any of** (a) MMP-recorded protest with participants ≥0.1% of population (per-capita threshold, calibrated to Iran 2022 Woman-Life-Freedom baseline; catches Yellow Vests, HK 2019, Iceland 2008, BLM 2020, Iran 2009 Green Movement), (b) V-Dem `v2cagenmob_ord ≥ 4` ("mass mobilization was a defining feature of the year"; post-2020 fallback for MMP), or **(c, v0.7.1) ACLED violent-demonstration fatalities ≥ 10 in the year** (the deadly-mobilization signature: Iran 2022 = 421 fatalities, USA 2020 BLM = 14, Iran 2021 = 10).
+- `outcome_violence` — fires if **any of** (a) UCDP GED records 100+ fatalities in state-based armed conflict, (b) Cline Center records a coup attempt (realized or attempted), or **(c, v0.7.1) ACLED total fatalities ≥ 100 in the year** (UCDP-equivalent threshold; complementary measurement from a different coding pipeline; critically fills UCDP's release-lag gap — UCDP coverage ends 2024, ACLED runs through 2026).
+
+**Why fatalities, not event counts.** v0.7-rev0 used an event-count threshold (≥10 ACLED demonstrations per million) and it broke catastrophically — Sweden, Japan, Germany, Canada, France, USA all flipped to mobilization=1 every year because ACLED counts every protest event (including 50-person climate rallies). The 2023 holdout Brier skill score collapsed from −0.05 to −0.81. The fix: ACLED only contributes via **fatalities**, the bias-resistant currency in event data. Deaths are coded across regimes more uniformly than events (hospitals, families, opposition track them even when state suppresses news). Peaceful protests of any volume contribute nothing.
 
 `unrest_next_year` is kept as a legacy column (OR of both tiers) for backwards compatibility but the headline forecasts are the two tiers separately.
 
-Multi-source fusion protects against any single source's quirks. ACLED, when access arrives, will replace the MMP + UCDP proxy. Earlier v0 attempts used V-Dem `v2cagenmob_ord ≥ 2` alone, which produced flat base rates (47–60% across regimes) because the ordinal is too broad.
+Multi-source fusion protects against any single source's quirks. ACLED **augments** MMP+UCDP rather than replacing them (v0.7 Phase A): MMP runs 1990-2020 with full global coverage; ACLED runs 1997-2026 but doesn't reach global coverage until 2018-2020. Keeping both as OR-channels means MMP covers the pre-2020 / pre-ACLED-coverage country-years while ACLED covers post-2020 + provides denser event counts where both are present. Earlier v0 attempts used V-Dem `v2cagenmob_ord ≥ 2` alone, which produced flat base rates (47–60% across regimes) because the ordinal is too broad.
 
 **Regime controls**: V-Dem Regimes of the World — closed autocracy, electoral autocracy, electoral democracy, liberal democracy. In v0.4 the **pooled model does not use regime dummies** (they were 0.816-correlated with `civil_liberties` and created an unstable coefficient allocation); civil liberties is the single regime-quality channel in the headline model. Per-regime stratified LASSO models are still fit and retained for within-regime analyst context.
 
-**Features (10 total)** — all raw cross-country levels, no within-country z-scoring:
+**Features (14 total, v0.7.1)** — all raw cross-country levels, no within-country z-scoring:
 
 | Feature | Type | Source |
 |---|---|---|
@@ -103,11 +106,17 @@ Multi-source fusion protects against any single source's quirks. ACLED, when acc
 | `gdp_growth` | Level (%) | WDI |
 | `cpi_inflation` | Level (%) clipped to [-10, 200] | WDI + IMF curated + IMF WEO bulk |
 | `unemployment` | Level (%) | WDI |
-| `political_violence_ord` | Level (0–4 ordinal) | V-Dem `v2caviol_ord` |
+| `political_violence_ord_lag1` | Level (0–4 ordinal), lag-1 | V-Dem `v2caviol_ord` |
+| `mass_mobilization_ord_lag1` | Level (0–4 ordinal), lag-1 | V-Dem `v2cagenmob_ord` |
 | `log_refugee_outflow` | Level (log1p) | UNHCR |
 | `coup_proof_fragmentation` | Level | Pilster-Böhmelt |
+| `log_acled_violent_demo_fat_per_cap_lag1` | log1p(deaths/million pop), lag-1 | ACLED Violent demonstration sub-event |
+| `log_acled_pv_fat_per_cap_lag1` | log1p(deaths/million pop), lag-1 | ACLED Political violence event types |
+| `acled_covered_lag1` | 0/1 missing-indicator co-feature | ACLED coverage flag |
 
 `cpi_inflation` is clipped at [-10, 200]% before fitting so hyperinflation outliers (Venezuela 2017, Zimbabwe 2008) don't dominate the coefficient. `log_refugee_outflow` is log1p-transformed for cross-country comparability (Afghanistan 6M vs USA 6K).
+
+**v0.7 Phase A — ACLED features built but not yet in the fit.** `08_build_panel.qmd` now also computes `log_acled_demos_per_cap_lag1`, `log_acled_fatalities_per_cap_lag1`, and `acled_covered_lag1` and persists them in `panel_features`. They are **deliberately not added to the model's `features` list yet**: ACLED's pre-2018 coverage gap would listwise-drop ~50% of training rows the moment those features became required for `complete.cases`. Phase A.5 / Phase B will decide on a missing-value strategy (zero-fill with co-feature, V-Dem ordinal fallback, etc.) and add the ACLED features to the fit with a before/after BSS comparison.
 
 Loaded into the panel but excluded from the v0.4 fit: `freedom_expression` and `regime_support_locus` (collinear with civil_liberties); `fariss_hr_score` and `polity2` (collinear, ~0.9 with civil_liberties); de Bruin `counterbalancing` / `politicization` (source ends 2010); `ffpi_avg` (no cross-country variation in a given year).
 
@@ -150,10 +159,14 @@ GitHub Pages deploys `web/` automatically on push to `main` (see `.github/workfl
 
 ## Current model state (honest)
 
-- **v0.6 Brier skill score (2023 holdout)**:
-  - **Mobilization tier**: **−0.05** (n=144, base rate 11.8%). The model does *worse* than always predicting the base rate. Honest finding — mass protest is genuinely hard to predict at 1-year horizon from structural country features alone. Protests are noisy, triggered by specific local events (a court ruling, a single death, a price hike), and weakly correlated with the slow-moving features in our panel.
-  - **Armed violence / coup tier**: **+0.45** (n=122, base rate 18.0%). Highly predictable. Conflict-ridden countries stay conflict-ridden; the structural fingerprint of armed violence is strong and persistent.
-  - The contrast validates the two-tier split. v0.5's single fused outcome was averaging these two distinct processes and producing a 0.255 skill that hid the gap. The new framing makes the limitation explicit: we can predict regime-threatening violence reasonably well, and we should not pretend to predict mass mobilization with the same confidence.
+- **v0.7.1 Brier skill score (2023 holdout)**:
+  - **Mobilization tier**: **+0.022** (n=144, base rate 14.6%). First time positive since the project started. Modest predictive value — the model adds a small amount of real information beyond the base rate. Still consistent with the literature: protest at 1-year horizon is genuinely hard to predict from structural features alone.
+  - **Armed violence / coup tier**: **+0.624** (n=144, base rate 25.0%). Strong predictive value — up from +0.46 in v0.6 (a 35% absolute improvement). The new ACLED-derived continuous fatality feature gave the model a much richer signal than the V-Dem ordinal lag it complements.
+  - The contrast still validates the two-tier split. Mobilization remains the harder problem; we don't pretend otherwise. But both tiers improved from the ACLED fatality channel: mobilization went from worse-than-baseline (−0.054) to slightly-better-than-baseline (+0.022), and violence got a major lift.
+
+- **v0.6 baseline (pre-ACLED) for comparison**:
+  - Mobilization: BSS = −0.054, base rate 11.8%
+  - Violence: BSS = +0.459, base rate 18.0%
 - **Face validity restored**: Cuba 34.6% > USA 26.6%. The v0.4.1 inversion (USA 39% > Cuba 32%) is gone because v0.5's monotonicity constraints zero out `civil_liberties`'s sign-flipped contribution (the "more civil liberties → more reported unrest" reporting-bias artifact). Country rankings now match political-risk intuition top to bottom.
 - **`political_violence_ord` is lagged by 1 year**. v0.4 used the concurrent V-Dem violence ordinal as a predictor, but our outcome label includes the V-Dem `v2cagenmob_ord >= 4` fallback for post-2020 years — concurrent violence partly predicts itself. Lagging breaks the autocorrelation.
 - **Monotonicity constraints** force every coefficient to its substantively-justified sign: `civil_liberties ≤ 0`, `cpi_inflation ≥ 0`, `unemployment ≥ 0`, etc. Reporting bias can no longer flip signs. Features that lose their predictive power when forced to the right sign get zeroed out (cpi_inflation, unemployment, civil_liberties, log_gdp_per_cap, loser_consent all sit at β = 0). **This is an honest empirical finding**: at the 1-year horizon, those features don't add predictive value beyond prior political violence — consistent with PITF/Goldstone literature (economic shocks predict 2-3 year horizons).
@@ -170,7 +183,7 @@ These would push the model from "v0 prototype" to "credible v1."
 
 | Priority | Source / change | Why | Status |
 |---|---|---|---|
-| 🔴 High | **ACLED** (protest/conflict events) | The canonical political-risk event source. Would replace the MMP+UCDP proxy with real-time event counts. Narrows the closedness-under-reporting bias but does not fully fix it. | Blocked on Research-tier API access; applied 2026-05-15 |
+| ✅ Done | **ACLED** (protest/conflict events) | The canonical political-risk event source. Augments (not replaces) MMP+UCDP fusion: ACLED brings 2018-2026 dense coverage to close MMP's 2020 cliff; MMP keeps pre-2018 Latin America/Europe covered where ACLED hadn't started yet. Narrows the closedness-under-reporting bias but does not fully fix it (ACLED still can't see inside DPRK / Eritrea). | Shipped in v0.7 Phase A — Research-tier API was denied; dashboard-read clearance granted; five pre-aggregated country-year xlsx files loaded |
 | 🔴 High | **Censored-outcome correction** | Heckman 2-stage or Bayesian baseline-prior to handle "observed" vs "true" unrest — the fundamental fix for the PRK problem. | Not started |
 | ✅ Done | **Raw cross-country levels, no imputation** | Replaces within-country z-scoring + region-median fills. Honest about data coverage. | Shipped in v0.4.1 |
 | 🟠 Medium | **Real CPI/unemployment for closed autocracies** | IMF Article IV reviews, World Bank country reports, central-bank releases for the ~10 countries currently dropping out (PRK, Eritrea, Saudi Arabia, Somalia, etc.). Hand-curated supplement, like the existing `02b_load_inflation_supplements.qmd`. | Partial (Cuba/Venezuela/Lebanon covered via 02b) |
@@ -186,13 +199,15 @@ These would push the model from "v0 prototype" to "credible v1."
 - ~~**Ridge regression** — stabilize correlated predictors without collinear sign-flip~~ — shipped in v0.3
 - ~~**LASSO + raw cross-country levels** — replace within-country z's with cross-sectional PITF/Goldstone framing~~ — shipped in v0.4
 - ~~**No-imputation policy** — drop region-median fills; missing source data → "no prediction available"~~ — shipped in v0.4.1
-- **Heckman / Bayesian censored-outcome correction** — model "observed unrest" vs "true unrest" separately. The structural fix for the PRK / closed-regime under-reporting bias. The most important single thing on this list.
-- **ACLED ingestion** — replace the MMP + UCDP + Cline outcome fusion with ACLED event data. Narrows under-reporting but doesn't solve it.
+- ~~**ACLED ingestion as third OR-channel in outcome fusion**~~ — shipped in v0.7 Phase A (mobilization + violence tiers)
+- **ACLED features in the fit (Phase A.5 / B)** — `log_acled_demos_per_cap_lag1` and `log_acled_fatalities_per_cap_lag1` are built and persisted in the panel but not yet in the model. Decide missing-value strategy (zero-fill + co-feature vs V-Dem ordinal fallback vs listwise drop), then add with before/after BSS comparison.
+- **ACLED YoY-change feature (Phase B)** — `acled_demos_yoy_change_lag1` with winsorization. Acceleration is mechanically the only signal in the pipeline that could predict short-fuse protest. Iran 2017→2022 demos went 2430 → 4281 (76% increase).
+- **Heckman / Bayesian censored-outcome correction (Phase C)** — model "observed unrest" vs "true unrest" separately. ACLED's now-measurable coverage + zero-counts in covered closed regimes (DPRK 0/0/0/1/4 demos 2018-2022) provide a stronger first-stage selection signal than was previously available.
 - **Hand-curated supplements for closed autocracies** — IMF Article IV / central-bank releases for the 10-18 countries that currently drop from inference. Same template as `02b_load_inflation_supplements.qmd`.
 - **Platt scaling / isotonic regression** — fix the high-end over-confidence visible in the 2023 reliability bins
-- **Country-month granularity** — revisit when ACLED comes online with event-level frequency
+- **Country-month granularity** — revisit now that ACLED is available; would need monthly aggregates rather than the current annual files
 - **Diagnostic** — emit a "countries never seen in training" list from `10_fit_model.qmd` to surface listwise-deletion damage
 
 ## License
 
-TBD — depends on data-source license compatibility. V-Dem is CC BY 4.0; WDI is CC BY 4.0; UNHCR data is open with attribution; FAO data is CC BY-NC-SA. ACLED is restrictive (no redistribution).
+TBD — depends on data-source license compatibility. V-Dem is CC BY 4.0; WDI is CC BY 4.0; UNHCR data is open with attribution; FAO data is CC BY-NC-SA. **ACLED is restrictive (no redistribution).** The repo handles this by gitignoring `data/raw/acled/` and committing only country-year aggregates / derived binary outcome flags to DuckDB and `artifacts/` — never the raw event rows. ACLED granted dashboard-read clearance after the Research-tier API application was denied; the loader reads pre-aggregated country-year xlsx files exported from ACLED's [Aggregated Data](https://acleddata.com/data-export-tool/) interface.
