@@ -10,6 +10,48 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Erica de Bruin's State Security Forces dataset
+measures the *internal* composition of security architectures across
+countries — counterbalancing and politicization indices, finer-grained
+than Pilster-Böhmelt's effective-number measure. Sounds great. But
+**coverage ends in 2010** and the model needs predictors through the
+current year. So this dataset is loaded for analysis but **excluded
+from the fit** for sparsity.
+
+**Data-analytics concepts shown here.**
+
+- *Recognizing when a dataset is too sparse to use*. A perfect feature
+  with 15-year-stale data is worse than a noisy feature with current
+  data. We could forward-fill from 2010 to 2025, but that fills 15
+  years of synthetic values that the model would learn from. Forward-
+  filling that long is dishonest.
+- *Documenting the road not taken*. This loader stays in the pipeline
+  with a clear note about why we're not using it. If someone wants to
+  redesign around historical analysis, the loader is ready. **Code
+  isn't just executable — it's a written record of analytic choices.**
+- *Industry parallel*: same pattern when you have an old proprietary
+  data source that's frozen. Either commit to using it for historical
+  analysis only, or replace it.
+
+**Domain terms used here.**
+
+- **de Bruin** — Erica de Bruin, political scientist at Hamilton
+  College. Author of *How to Prevent Coups d'État* (Cornell, 2020).
+- **State security forces** — military, police, paramilitary,
+  intelligence services; the apparatus of state violence.
+- **Counterbalancing** (de Bruin's version) — finer-grained than
+  Pilster-Böhmelt; measures how many parallel security structures
+  exist that could check each other.
+- **Politicization** — extent to which security forces are co-opted
+  for political (rather than military) purposes.
+
+**What success looks like.** The `security_forces` table loads
+cleanly. Flagged in the model card as **excluded from v0.4+ fit**
+because coverage ends 2010. If de Bruin updates the dataset, this
+loader picks up the new data automatically.
+:::
+
 Downloads Erica de Bruin's State Security Forces dataset (the country-year
 file from her 2021 JPR article) and lands it as the `security_forces` table.
 

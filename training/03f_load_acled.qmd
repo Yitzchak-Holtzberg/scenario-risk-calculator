@@ -10,6 +10,66 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** ACLED (Armed Conflict Location & Event Data) is
+the canonical real-time event source in political science. We use it
+for two purposes: as an OR-fused channel in both outcome labels
+(deadly mobilization and total violence ≥100 fatalities), and as
+continuous-fatality-lag features in the model fit. ACLED narrows
+(though doesn't eliminate) the media-availability bias that affects
+all event data.
+
+**Data-analytics concepts shown here.**
+
+- *Choosing the right level of aggregation*. The six regional files
+  are (week × admin1 × event_type × sub_event_type) cells. That's
+  fine enough that we can roll up to country-year however we want,
+  but pre-aggregated enough to be tractable (~950K rows total). The
+  five country-year aggregate files we initially used (deleted in
+  v0.7.1) had collapsed `sub_event_type` and broke the outcome label.
+  **The level of aggregation in your source data determines what
+  analyses you can do.**
+- *Sub-event types matter*. ACLED's "Violent demonstration",
+  "Excessive force against protesters", "Peaceful protest", and
+  "Mob violence" are different things. Collapsing them into "demos"
+  loses the discrimination we need.
+- *Fatalities as the bias-resistant currency*. Open democracies get
+  more news coverage so more *events* get coded; closed regimes are
+  under-counted in event counts but death counts are more robust
+  (hospitals, families, opposition track them). The pipeline only
+  uses ACLED *fatalities* as outcome-label triggers, never raw event
+  counts — this is the design lesson from v0.7-rev0's failure.
+- *License-aware data handling*. ACLED's terms restrict
+  redistribution. We gitignore the raw files in `data/raw/acled/` and
+  only commit derived country-year aggregates and binary outcome
+  flags. Same legal posture matters in industry contracts.
+
+**Domain terms used here.**
+
+- **ACLED** — Armed Conflict Location & Event Data Project.
+  https://acleddata.com
+- **Sub-event type** — ACLED's fine-grained categorization of events
+  (25+ categories). Examples: Peaceful protest, Violent demonstration,
+  Protest with intervention, Excessive force against protesters,
+  Armed clash, Air/drone strike.
+- **Admin1** — ACLED's geographic unit one level below country
+  (provinces, states). Useful for "spread across the country vs.
+  localized" features.
+- **POPULATION_EXPOSURE** — ACLED's estimate of population in the
+  area exposed to events. Built-in denominator for per-capita
+  features.
+- **Media-availability bias** — the systematic tendency for event-data
+  sources to over-count events in places with active media and
+  under-count them where media is suppressed.
+
+**What success looks like.** The `acled_annual` table has one row per
+(country, year) with fatality and event counts broken out by sub-event
+type plus flags for coverage and year-completeness. ~12,000 rows
+across ~245 countries. Diagnostics confirm Iran 2022's 421
+violent-demonstration fatalities and DPRK's near-zero coverage (which
+ACLED can't fix because the censoring is upstream).
+:::
+
 ACLED Research-tier API access was denied; ACLED support clarified that
 **dashboard read access** (and AI agents reading on the user's behalf) is
 permitted — only programmatic API use is restricted. We pull the six

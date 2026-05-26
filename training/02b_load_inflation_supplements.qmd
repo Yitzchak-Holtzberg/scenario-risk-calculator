@@ -10,6 +10,51 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** The World Bank doesn't have inflation data for the
+countries that matter most for political-risk forecasting. Cuba has
+no WDI inflation at all. Venezuela's official numbers are politically
+managed (the government denies hyperinflation). North Korea, Eritrea,
+and parts of Syria have nothing. This notebook fills those gaps with
+**three carefully prioritized backfill sources**.
+
+**Data-analytics concepts shown here.**
+
+- *Source priority chains* — when a value is missing from your primary
+  source, fall back to source #2, then source #3. SQL's `COALESCE`
+  function expresses this pattern cleanly.
+- *Hand-curated overrides for tricky cases* — sometimes you have to
+  manually maintain a small CSV of "the right values" because no
+  programmatic source has them. The `data/curated/` directory is the
+  pattern for this: small, hand-edited, version-controlled, justified.
+- *Data quality flags* — when a value comes from an imputation or
+  curation step rather than the primary source, flag it so downstream
+  code can treat it differently (e.g., listwise-drop imputed rows from
+  training).
+- *Bias-aware modeling* — politically-managed economic data isn't
+  random noise; it's biased in known directions (governments suppress
+  inflation). We use independent academic estimates (Hanke) and IMF
+  Staff numbers from Article IV consultations to cross-check.
+
+**Domain terms used here.**
+
+- **IMF WEO** — International Monetary Fund World Economic Outlook.
+  Twice-yearly forecasts with country-team estimates.
+- **IMF Article IV** — annual IMF country consultations; produce
+  independent assessments of national accounts.
+- **Hanke Troubled Currencies Project** — Steve Hanke's
+  hyperinflation-tracking estimates (Cato/Johns Hopkins). Independent
+  measurements for politically-managed economies.
+- **PCPIPCH** — IMF's series code for "Consumer Prices, percent
+  change" (year-over-year inflation).
+
+**What success looks like.** Three DuckDB tables land here:
+`imf_inflation` (hand-curated values for ~7 crisis countries),
+`imf_weo` (bulk IMF WEO data for ~200 countries), and `hanke_inflation`
+(Hanke's independent estimates). The CPI priority chain in
+`08_build_panel.qmd` then becomes: `COALESCE(wdi, imf_curated, imf_weo)`.
+:::
+
 The World Bank WDI has inflation gaps for the countries that matter most for
 political-risk forecasting — Cuba (all years NA), North Korea, parts of Syria
 and Eritrea — and politically-managed series for others (Venezuela, Argentina,

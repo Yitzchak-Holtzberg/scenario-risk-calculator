@@ -10,6 +10,46 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Refugee outflow is one of the strongest published
+signals of political stress — when conditions deteriorate beyond what
+people will accept, they leave. UNHCR maintains the canonical refugee
+statistics. We pull both sides: country of origin (outflow) and
+country of asylum (inflow). The model uses **net outflow** (outflow −
+inflow) as a stress signal.
+
+**Data-analytics concepts shown here.**
+
+- *Origin-vs-destination accounting*. Gross outflow looks high for
+  countries that are also major destinations (USA receives ~4,000
+  asylum seekers a year). Net outflow (`gross − inflow`) properly
+  zeros that out — receiving democracies don't have a refugee
+  outflow signal.
+- *Reverse causality awareness*. Refugee outflow is a **symptom** of
+  instability, not a cause. Using it as a feature works only if we
+  remember it's downstream of the thing we're predicting, and we
+  carefully avoid letting future outflow leak into current
+  predictions (we lag).
+- *Two-table design for the same source*. We could have flattened to
+  one table, but keeping origin and destination separate makes the
+  asymmetry explicit and lets `08_build_panel.qmd` compute net
+  outflow at panel-build time.
+
+**Domain terms used here.**
+
+- **UNHCR** — UN High Commissioner for Refugees. Maintains global
+  refugee statistics.
+- **Country of origin** — where refugees came from. Outflow signal.
+- **Country of asylum** — where refugees ended up. Inflow signal.
+- **Asylum seeker** — someone with a pending refugee claim. UNHCR
+  separates them from confirmed refugees.
+
+**What success looks like.** Two DuckDB tables: `unhcr` (origin-side
+counts) and `unhcr_inflow` (destination-side counts). Each row is one
+(country, year) with refugee + asylum-seeker counts. The model uses
+net outflow as `log_refugee_outflow` in the feature set.
+:::
+
 Pulls annual end-of-year refugee + asylum-seeker counts from UNHCR's public
 Refugee Statistics API along two dimensions and writes two tables to
 `data/panel.duckdb`:

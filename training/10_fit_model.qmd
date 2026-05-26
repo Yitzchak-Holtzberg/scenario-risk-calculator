@@ -10,6 +10,72 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Everything before this notebook was data engineering.
+This is the **actual modeling step** — fitting a statistical model
+that takes the country features and predicts the outcome probability.
+We fit two LASSO logistic regressions (one per outcome tier) and
+persist the coefficients for the dashboard to use.
+
+**Data-analytics concepts shown here.**
+
+- *Logistic regression*. The standard model when your outcome is
+  binary (event happened: yes/no). It outputs a probability between
+  0 and 1. We use the `glmnet` package's regularized version.
+- *LASSO regularization*. LASSO (`alpha = 1` in glmnet) penalizes
+  large coefficients and pushes some to **exactly zero**, doing
+  automatic feature selection. With ~14 features and ~3,000 training
+  rows, regularization prevents overfitting.
+- *Monotonicity constraints*. We force each coefficient to its
+  substantively-correct sign (e.g., `civil_liberties` must have a
+  non-positive coefficient — more liberties → less unrest, not more).
+  This kills the "reporting bias" failure mode where the model would
+  otherwise learn counterintuitive correlations from biased data.
+- *Cross-validation for hyperparameter tuning*. LASSO has one tuning
+  parameter (`lambda`, the strength of regularization). We use
+  `cv.glmnet()` to pick the lambda that minimizes prediction error
+  on held-out folds — automated, principled, defensible.
+- *Bootstrap confidence intervals*. We refit the model 500 times on
+  resampled data, then take the empirical covariance of the
+  coefficient estimates. This gives us coefficient SEs that account
+  for both sampling variance and the regularization-induced shrinkage.
+- *Stratification by regime type*. We fit one pooled model and four
+  per-regime models (closed autocracy / electoral autocracy /
+  electoral democracy / liberal democracy). Sometimes different
+  regimes have different unrest dynamics; per-regime fits can capture
+  that.
+- *Train/test split*. We train on 1995-2022, hold out 2023. The
+  holdout is what `11_calibration.qmd` uses to assess generalization.
+  This is the single most important practice in predictive modeling:
+  **never evaluate on data you trained on.**
+- *Missing-indicator pattern*. ACLED's pre-2018 coverage gap would
+  listwise-drop ~50% of training rows if we required ACLED features
+  to be non-NA. Instead we zero-fill the ACLED slope features and
+  add `acled_covered_lag1` as a co-feature. The model can identify
+  pre-coverage rows separately from real-zero rows. Preserves training
+  data without learning fake patterns.
+
+**Domain terms used here.**
+
+- **Logistic regression** — generalized linear model for binary
+  outcomes. Coefficients are in log-odds.
+- **LASSO** — Least Absolute Shrinkage and Selection Operator.
+  Regression with an L1 penalty on coefficients.
+- **`glmnet` / `cv.glmnet`** — the canonical R package for regularized
+  GLMs. Fast, well-maintained, used in production.
+- **`lambda.min`** — the lambda value that gives the lowest CV error.
+- **Stratified fit** — fitting separate models for different subgroups
+  (here: regime types).
+- **Bootstrap** — resample the data with replacement, refit the model,
+  see how much the estimates vary. Standard for non-parametric SEs.
+
+**What success looks like.** The `data/model/fit.rds` artifact stores
+two tier dictionaries (mobilization, violence), each with a pooled
+fit, per-regime fits, coefficients, and bootstrap covariance.
+`11_calibration.qmd` then scores the held-out 2023 data and reports
+Brier skill scores.
+:::
+
 **v0.6 architecture** (extends v0.5 with two-tier outcome stratification):
 
 - **Two outcome tiers fit separately**:

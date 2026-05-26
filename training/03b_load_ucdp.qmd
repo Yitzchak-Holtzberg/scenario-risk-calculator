@@ -10,6 +10,49 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Uppsala's UCDP-GED is the most-cited dataset of
+armed-conflict events in academic political science. We aggregate it
+to country-year fatality counts and use the ≥100-fatality threshold
+as one of the OR-fused channels driving `outcome_violence` in
+`09_label_events.qmd`.
+
+**Data-analytics concepts shown here.**
+
+- *Memory-efficient loading of large files*. The raw UCDP CSV is
+  ~240MB. Loading all 50+ columns into R would use a lot of RAM; we
+  pass `colClasses` to read only the 5 columns we need
+  (`country_id`, `year`, `best`, `high`, `low` fatality estimates).
+- *Multiple estimates for the same outcome*. UCDP provides `best`,
+  `high`, and `low` fatality estimates per event because deaths are
+  uncertain. We use `best` for thresholding and keep `high` for
+  sensitivity analysis.
+- *Self-contained reproducibility*. The notebook downloads the data
+  directly from the UCDP website if not already present, so anyone
+  can reproduce the pipeline without manual file management.
+- *Threshold choice with justification*. UCDP's traditional "minor
+  armed conflict" threshold is ≥25 fatalities/year. We use ≥100 to
+  bias toward larger episodes (regime-threatening violence, not
+  isolated incidents). The threshold is documented in commit history
+  and the model card — never silent.
+
+**Domain terms used here.**
+
+- **UCDP** — Uppsala Conflict Data Program. https://ucdp.uu.se
+- **UCDP-GED** — Georeferenced Event Dataset. Event-level conflict data.
+- **State-based armed conflict** — UCDP's primary category; conflicts
+  where at least one party is a government. Excludes pure
+  intercommunal violence.
+- **Fatalities ≥ 100** — our threshold for "serious armed conflict"
+  in the outcome label. Matches the ACLED-violence OR-channel for
+  consistency.
+
+**What success looks like.** The `ucdp_annual` table has one row per
+(country, year) with three fatality sums. Downstream code only uses
+`fatalities_best`. Coverage runs 1989-2024; ACLED fills the post-2024
+gap in `09_label_events.qmd`.
+:::
+
 UCDP Georeferenced Event Dataset (GED) v25.1 — hand-coded armed-conflict
 events from Uppsala 1989–2024. Each row = one fatal event. We aggregate to
 **country-year**:

@@ -10,6 +10,55 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** The training pipeline has produced a fitted model
+in `fit.rds`. The dashboard at `web/index.html` needs to consume that
+model. This notebook **freezes the model** as JSON files the
+dashboard can read, plus a country-snapshot JSON with the latest
+feature values per country and their predicted probabilities + CIs.
+**No backend runs at user-request time** — all the math happens in the
+browser using the frozen JSON.
+
+**Data-analytics concepts shown here.**
+
+- *Frozen artifacts as the deployment unit*. The model is a list of
+  coefficients. Once you've decided on them, they don't need to
+  re-run. Serializing to JSON and deploying as static files is **the
+  simplest possible production deployment**.
+- *Predicting at deploy time vs. request time*. We pre-compute the
+  current prediction for every country and freeze it in
+  `country_snapshot.json`. The dashboard's "what if" sliders re-do
+  the linear-combination math in JavaScript, but the baseline is
+  pre-computed.
+- *Monte Carlo for confidence intervals*. We sample 1,000 draws from
+  the bootstrap MVN distribution of coefficients, score each draw,
+  and take the 5th and 95th percentiles as the 90% CI. Honest
+  uncertainty propagation that includes both feature uncertainty and
+  coefficient uncertainty.
+- *Per-feature contributions*. The dashboard shows "civil_liberties
+  contributed −0.32 to log-odds." We export those contributions per
+  country so the dashboard can render bar charts. Interpretability
+  is a deliverable, not an afterthought.
+
+**Domain terms used here.**
+
+- **Artifact** — a frozen file produced by the training pipeline that
+  downstream systems consume.
+- **MVN sampling** — drawing from a multivariate normal distribution.
+  Standard for propagating coefficient uncertainty.
+- **In-browser inference** — the model math runs in the user's
+  browser via JavaScript, not on a server.
+- **Snapshot** — a frozen view of "current state" at a specific date.
+
+**What success looks like.** Five JSON files in `artifacts/`:
+`weights.json` (coefficients + vcov), `base_rates.json` (per-regime
+training-data base rates), `country_snapshot.json` (current
+predictions + features + contributions per country), `calibration.json`
+(Brier metrics + reliability), `hanke_inflation.json` (the dashboard's
+inflation-source toggle data). The dashboard at `web/index.html`
+reads these via `fetch()`.
+:::
+
 Writes JSON files to `../artifacts/` that the static dashboard consumes.
 Math runs in the browser — no backend at runtime.
 

@@ -10,6 +10,60 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Notebooks 00-07 load ~10 different data sources
+into separate DuckDB tables. This notebook **joins them all together**
+into one big country-year panel — one row per (country, year) with all
+the predictor columns we'll feed to the model in `10_fit_model.qmd`.
+This is the central data-engineering step of the project.
+
+**Data-analytics concepts shown here.**
+
+- *Multi-table joins at scale*. We join through the `countries`
+  master table (built in `00_load_countries.qmd`). Every source LEFT
+  JOIN on `(iso3c, year)`. ~250 countries × ~35 years × ~30 columns.
+- *Source priority chains with `COALESCE`*. When inflation is missing
+  from WDI, fall back to hand-curated IMF values; if still missing,
+  use bulk IMF WEO. The SQL pattern is `COALESCE(w.cpi, imf.cpi, weo.cpi)`.
+  This is one of the most useful SQL idioms in real analysis.
+- *Honesty about missing data*. We do NOT impute model-input
+  features. If V-Dem and WDI both have no data for North Korea's CPI,
+  the row stays NA. Downstream, `complete.cases()` in `10` listwise-
+  drops those rows. The dashboard shows "no prediction available" for
+  countries that can't be scored. This is the v0.4.1 "no-imputation
+  policy" — synthetic medians can mislead the model and the user.
+- *Heavy-tail transforms*. Some features have huge dynamic range
+  (Syria's millions of refugees vs. Iceland's hundreds). We `log1p()`
+  them so the regression doesn't get dominated by outliers. CPI
+  inflation gets clipped to [-10, 200] for the same reason
+  (Zimbabwe 2008 hyperinflation would otherwise swing the
+  coefficient).
+- *Lagged features*. If we're predicting unrest in year T+1, our
+  features must be from year T or earlier (otherwise we're "predicting"
+  using information that wouldn't exist yet). We lag
+  `political_violence_ord` and `mass_mobilization_ord` by 1 year to
+  ensure no leakage.
+
+**Domain terms used here.**
+
+- **Panel data** — observations on multiple entities (countries) over
+  multiple time periods (years). Aka longitudinal data.
+- **`COALESCE`** — SQL function that returns the first non-NULL
+  argument. The standard idiom for source-priority chains.
+- **Listwise drop / complete-case analysis** — discarding rows with
+  any missing values. Honest alternative to imputation.
+- **`log1p(x)` = `log(1 + x)`** — handles `x = 0` cleanly; the
+  standard heavy-tail transform.
+- **Lag (lag-1)** — using year T-1's value as the predictor for year
+  T+1's outcome. Prevents future-leakage.
+
+**What success looks like.** The `panel_features` table has ~7,000
+rows (200 countries × 35 years, minus the ones we drop), 30+ columns,
+and ZERO synthetic values in the model-input features. NA means "we
+don't know," not "we imputed something." `09_label_events.qmd` adds
+the outcome columns on top.
+:::
+
 Joins V-Dem, WDI, UNHCR, and FAO through the `countries` master table into a
 single country-year panel. One row per (iso3c, year).
 

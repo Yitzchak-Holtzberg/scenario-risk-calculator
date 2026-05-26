@@ -10,6 +10,46 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Food prices are a famous trigger for political
+unrest — the 2007-2008 food crisis preceded the Arab Spring; cost-of-
+living shocks accelerate protests broadly. FAO publishes a Food Price
+Index (FFPI) that tracks global commodity prices monthly. We load it,
+aggregate to annual, and try to use it as a feature.
+
+**Data-analytics concepts shown here.**
+
+- *Temporal-grain mismatch*. FFPI is monthly; our panel is annual.
+  We average to year. Year-over-year change would be richer but adds
+  complexity; we keep it simple for v0.
+- *When a feature has no cross-sectional variation*. FFPI is
+  **global** — the value for 2020 is the same for the USA, Cuba,
+  Iran, and Sweden. In a country-year panel, "global FFPI" has zero
+  variance across countries within any given year. That means it
+  contributes nothing to a model that's trying to predict differences
+  between countries. We load it anyway for completeness but the model
+  fit drops it — an important diagnostic about what kinds of features
+  can actually identify cross-sectional differences.
+- *The lesson*: not every "relevant" variable is a useful feature.
+  Country-specific food vulnerability (e.g., percent of imports that
+  are staples) would work; a global index doesn't.
+
+**Domain terms used here.**
+
+- **FAO** — UN Food and Agriculture Organization.
+- **FFPI** — FAO Food Price Index. A weighted basket of global
+  agricultural commodity prices indexed to 2014-2016 = 100.
+- **Cross-sectional vs. time-series variation** — features that vary
+  *between units* at one time vs. *over time* for one unit. Our model
+  primarily exploits cross-sectional variation across countries.
+
+**What success looks like.** The `fao` table has one row per
+year × month. Aggregated to annual in `08_build_panel.qmd` and ends
+up as `ffpi_avg` — loaded in the panel but dropped from the model
+fit. Country-level food security (`SOFI` from FAO) is on the roadmap
+as a replacement.
+:::
+
 Downloads FAO's monthly Food Price Index (FFPI), 1990–present, plus the five
 commodity sub-indices (Meat, Dairy, Cereals, Oils, Sugar). Lands as `fao` in
 `data/panel.duckdb`. Unlike the other sources this is a **global** time series,

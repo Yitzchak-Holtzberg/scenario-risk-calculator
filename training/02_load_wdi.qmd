@@ -10,6 +10,45 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Economic conditions are one of the strongest
+predictors of political unrest (inflation shocks, growth collapses,
+high unemployment). The World Bank publishes ~1,500 indicators in its
+World Development Indicators (WDI) database with global coverage 1960
+to present. We pull six: inflation, GDP growth, GDP per capita, trade
+share, unemployment, and population.
+
+**Data-analytics concepts shown here.**
+
+- *REST API ingestion via an R wrapper*. The `WDI` package wraps the
+  World Bank API so we can pull data with one function call rather
+  than constructing HTTP requests manually.
+- *Living data vs. frozen data*. WDI revises retroactively — the
+  number we got today for 2023 may differ next quarter. The render
+  date is therefore part of the data; pipeline reproducibility requires
+  preserving the snapshot.
+- *Naming things consistently*. We rename the cryptic WDI indicator
+  codes (e.g., `FP.CPI.TOTL.ZG`) to human-readable column names
+  (`cpi_inflation`) at load time. Downstream code never sees the
+  cryptic codes.
+
+**Domain terms used here.**
+
+- **WDI** — World Development Indicators (World Bank). The canonical
+  source of country-level macro stats.
+- **CPI** — Consumer Price Index, the standard measure of inflation.
+- **GDP per capita (constant USD)** — wealth level, adjusted for
+  inflation. Constant-USD rather than current-USD so it's comparable
+  across years.
+- **Trade as % of GDP** — exports + imports divided by GDP. A measure
+  of economic openness.
+
+**What success looks like.** The `wdi` table has ~270 reporting
+entities × ~35 years × 6 indicators. Coverage is patchy for some
+indicators (Cuba doesn't report CPI to the World Bank, for example),
+which is OK — we handle the NAs honestly in `08_build_panel.qmd`.
+:::
+
 Pulls five macroeconomic indicators (inflation, GDP growth, GDP/capita, trade
 exposure, unemployment) from the World Bank's REST API and lands them as the
 `wdi` table in `data/panel.duckdb`. One row per country × year. WDI hits the

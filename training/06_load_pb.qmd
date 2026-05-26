@@ -10,6 +10,48 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Authoritarian leaders fragment their militaries to
+prevent coups — a regime with multiple competing security branches is
+harder to overthrow because no single commander has enough force.
+Pilster-Böhmelt measure this with a Herfindahl-Hirschman-style index
+of "effective number of forces." Higher = more fragmented = harder
+to coup. The model uses it as `coup_proof_fragmentation`.
+
+**Data-analytics concepts shown here.**
+
+- *Harvard Dataverse as a data repository*. Academic datasets often
+  live on Dataverse, a Harvard-run repository with stable DOIs.
+  `download.file()` with the Dataverse API URL fetches the latest
+  version programmatically.
+- *Effective-number / Herfindahl-style indices*. These are diversity/
+  concentration measures from economics (the Herfindahl-Hirschman
+  Index for market concentration). Same math, different application
+  — political-science adapts the technique to measure military
+  fragmentation.
+- *ID system conversion is universal*. P-B uses Correlates-of-War
+  (`ccode`) numeric codes. We convert to `iso3c` via `countrycode`.
+  Same pattern as every other loader.
+
+**Domain terms used here.**
+
+- **Pilster-Böhmelt** — Ulrich Pilster and Tobias Böhmelt, political
+  scientists who built the counterbalancing dataset.
+- **Counterbalancing** — strategy of fragmenting the military into
+  multiple competing branches to prevent any one commander from
+  successfully launching a coup.
+- **Effective number of forces** — Herfindahl-style index of military
+  fragmentation. 1 = one unified military, 5 = five equally-sized
+  branches.
+- **Herfindahl-Hirschman Index (HHI)** — economic measure of market
+  concentration adapted here for military structure.
+
+**What success looks like.** The `pb_counterbalancing` table has one
+row per (country, year). Used in the model as
+`coup_proof_fragmentation` — one of the consistently nonzero
+coefficients in the violence-tier model.
+:::
+
 Downloads the Pilster-Böhmelt "Counterbalancing / Coup-Proofing Data" from
 Harvard Dataverse and lands it as the `pb_counterbalancing` table.
 

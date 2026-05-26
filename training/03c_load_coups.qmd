@@ -10,6 +10,40 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Cline Center's Coup d'État Project is the canonical
+dataset of coup attempts since 1945. We use the count of realized OR
+attempted coups as an OR-fused channel driving `outcome_violence` in
+`09_label_events.qmd`.
+
+**Data-analytics concepts shown here.**
+
+- *Direct file download in a notebook*. The Illinois Data Bank serves
+  files at predictable URLs. `download.file()` pulls the file once,
+  cached locally, so subsequent renders don't re-download.
+- *Aggregating boolean flags*. The raw data has columns `realized`,
+  `attempt`, `conspiracy` that are 0/1 flags. Summing them by
+  (country, year) counts the number of each type.
+- *Distinguishing what counts as an outcome*. We use `realized OR
+  attempted` for the outcome flag; `conspiracy` (uncovered plots) is
+  kept as informational but not part of the binary outcome — those
+  are too speculative for a forecasting label.
+
+**Domain terms used here.**
+
+- **Cline Center** — University of Illinois research group
+  maintaining the Coup d'État Project.
+- **Realized coup** — successful seizure of power.
+- **Attempted coup** — actual attempt that failed.
+- **Conspiracy** — uncovered plot that didn't reach the attempt
+  stage. Not used in the outcome label.
+
+**What success looks like.** The `coups_annual` table has rows only
+for country-years that had a coup event of some kind. Country-years
+with no coup activity simply aren't in the table — `09_label_events.qmd`
+treats their absence as zero via `LEFT JOIN` + `COALESCE`.
+:::
+
 Hand-coded coup events 1945–2026 from the Cline Center at University of
 Illinois. Each row = one coup event. We aggregate to **country-year**:
 

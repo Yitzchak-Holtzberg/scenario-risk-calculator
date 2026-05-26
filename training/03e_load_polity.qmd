@@ -10,6 +10,46 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Polity is the oldest cross-country regime
+classification, used in political science for 30+ years. The `polity2`
+score (−10 full autocracy to +10 full democracy) is a standard
+regression covariate. We load it for analysis but exclude it from the
+v0.4+ model fit for two reasons: **coverage ends in 2018** and it's
+**~0.9 correlated with V-Dem's civil-liberties index** (same
+collinearity issue as Fariss).
+
+**Data-analytics concepts shown here.**
+
+- *Composite scores from sub-scores*. Polity's `democ` (0-10) minus
+  `autoc` (0-10) gives the headline `polity2` (-10 to +10). Two-axis
+  scales reduced to one for downstream use.
+- *Excel as a data format*. Polity ships as an XLS file (older Excel
+  binary format). `readxl::read_excel` handles both `.xls` and `.xlsx`
+  transparently.
+- *Coverage cliffs*. When a dataset ends in 2018 and your panel runs
+  to 2025, you have to decide: forward-fill the last known value? Use
+  the variable as historical-only? Drop the variable? We chose
+  "exclude from fit" because forward-filling 7 years feels worse than
+  losing the variable.
+- *Comparing competing measures of the same concept*. Polity, V-Dem
+  regime classification, and Fariss all measure aspects of political
+  freedom. They mostly agree. Picking one and excluding the rest is a
+  judgment call.
+
+**Domain terms used here.**
+
+- **Polity / Polity5** — the project name and its latest release.
+  Maintained by the Center for Systemic Peace.
+- **`polity2`** — the composite score (democ − autoc), range -10 to +10.
+- **Interregnum / interruption / transition** — special codes in Polity
+  for regime transitions where the score is missing or ambiguous.
+
+**What success looks like.** The `polity5` table loads with one row
+per (country, year) for 1800-2018. Excluded from the v0.4+ model fit.
+If V-Dem's coverage ever fails, Polity could fill in.
+:::
+
 Polity5 from Marshall et al. / Center for Systemic Peace. Annual democracy
 (0–10) and autocracy (0–10) scores combined into the `polity2` score
 ranging −10 (full autocracy) to +10 (full democracy). Coverage: 1800–2018.

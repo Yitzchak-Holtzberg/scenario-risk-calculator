@@ -10,6 +10,64 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** `08_build_panel.qmd` produced the predictors.
+This notebook produces the **outcomes** — the binary labels the model
+will learn to predict. Outcomes are the most important and often
+hardest part of a predictive analysis. Defining them carelessly is
+where projects most often go wrong.
+
+**Data-analytics concepts shown here.**
+
+- *Outcome definition is a design decision*. There's no objective
+  ground truth for "country had a mass mobilization episode" — you
+  pick a definition and live with it. Different choices produce
+  different models. We split into two tiers (mobilization, violence)
+  because they're empirically different processes.
+- *Multi-source OR-fusion*. No single source catches every event.
+  MMP records large protests but ends in 2020. V-Dem has expert
+  ordinals but updates slowly. ACLED has dense recent coverage but
+  pre-2018 geographic gaps. We `OR-fuse` them: a country-year is
+  labeled 1 if ANY source flags it. This is **data ensembling at the
+  outcome level**, not just the model level.
+- *Threshold choices are calibration choices*. We use ACLED violent-
+  demonstration fatalities ≥ 10 (catches Iran 2022's 421 deaths,
+  USA BLM's 14) and UCDP fatalities ≥ 100 (the canonical threshold
+  for "serious armed conflict"). Lower or higher thresholds change
+  the label distribution. Document and justify every threshold.
+- *Bias-aware feature design*. Event counts have media-availability
+  bias (open democracies get more news coverage so more events get
+  coded). Fatalities are the bias-resistant currency. v0.7-rev0 used
+  event counts and broke catastrophically; v0.7.1 uses fatalities only.
+- *Future-leakage avoidance via lagged outcomes*. The label at panel
+  row T predicts what happens at year T+1 (`LEAD(...) OVER ...` in
+  SQL). The features stay at year T. Two-year gap between feature
+  lags (T-1) and outcomes (T+1) keeps the prediction task honest.
+- *NULL vs. 0 vs. 1*. "No data about next year" is different from
+  "we know nothing happened." The CASE WHEN logic handles this
+  explicitly: NULL when sources don't have data, 0 when all sources
+  agree on no event, 1 when any source flags an event.
+
+**Domain terms used here.**
+
+- **Outcome label** — the variable we're trying to predict. In
+  classification, it's a 0/1 flag per observation.
+- **OR-fusion** — combining multiple sources with logical OR. Any
+  source flagging "yes" → outcome = 1.
+- **Future-leakage** — using information that wouldn't be available
+  at prediction time. Cardinal sin in predictive modeling.
+- **Lag-1** — using year T-1's value to predict year T+1's outcome.
+- **`LEAD(...) OVER (PARTITION BY ... ORDER BY ...)`** — SQL window
+  function that pulls the next row's value within a country.
+
+**What success looks like.** The `panel_labeled` table adds three
+columns to `panel_features`: `outcome_mobilization`, `outcome_violence`,
+and `unrest_next_year` (legacy fused). Base rates are around 11-15%
+for mobilization, 25-30% for violence — within the range where a
+model can usefully discriminate. If the base rate were 1% or 99%,
+the prediction task would be much harder.
+:::
+
 **v0.6:** stratify the outcome into two tiers. The previous single
 `unrest_next_year` flag fused four channels into one — which made the
 prediction ambiguous ("USA 26%" could mean coup OR protest OR armed

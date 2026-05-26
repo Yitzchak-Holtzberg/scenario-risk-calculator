@@ -10,6 +10,48 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Fariss's latent human-rights scores combine
+multiple competing human-rights coding sources (Amnesty International,
+US State Dept, Hathaway, CIRI, PTS) into one continuous latent index
+using item-response theory. It's an independent academic measure that
+should complement V-Dem's expert-coded civil-liberties index — but in
+practice the two correlate ~0.9. The notebook still loads Fariss for
+analysis but the **model fit excludes it for collinearity**.
+
+**Data-analytics concepts shown here.**
+
+- *Loading data that you decide NOT to use*. Real analysis includes
+  failed experiments. Fariss looked promising; collinearity
+  diagnostics killed it. We keep the loader so others can re-evaluate.
+- *Item-response theory (IRT) for combining noisy measurements*. When
+  multiple sources rate the same underlying construct on different
+  scales, IRT finds the latent score that best explains all of them
+  simultaneously. The output (`theta_mean`) is on a z-like scale.
+- *Collinearity matters more than it seems*. Two features correlated
+  0.9 won't help a regularized model — LASSO will zero out one of
+  them, and which one gets zeroed depends on tiny noise. Better to
+  drop one upstream than let the model pick arbitrarily.
+
+**Domain terms used here.**
+
+- **Fariss** — Christopher Fariss, political scientist at Univ. of
+  Michigan; author of the latent human-rights protection scores.
+- **Item-response theory (IRT)** — statistical technique originally
+  from educational testing, used here to combine multiple noisy
+  observations of the same latent quantity.
+- **`theta_mean`** — Fariss's name for the posterior mean of the
+  latent score. Higher = better human rights protection.
+- **CIRI, PTS** — competing human-rights coding projects whose data
+  Fariss combines.
+
+**What success looks like.** The `fariss_hr` table loads but it's
+**flagged in the model card as excluded from the v0.4+ fit** due to
+collinearity with `civil_liberties`. If you wanted to redesign the
+model around Fariss instead of V-Dem civil-liberties, this is where
+you'd start.
+:::
+
 Christopher Fariss's Latent Human Rights Protection Scores v4.02 — an
 item-response-theory model that combines multiple human-rights coding
 sources (Amnesty, State Dept, Hathaway, CIRI, PTS) into a single latent

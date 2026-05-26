@@ -10,6 +10,47 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Mass Mobilization Project (MMP) is one of the
+canonical sources for "did a large protest happen here this year?"
+across the world, 1990-2020. Each row in the raw data is one protest
+event; we aggregate to country-year counts so it fits the panel
+grain. MMP is one of the OR-fused channels driving
+`outcome_mobilization` in `09_label_events.qmd`.
+
+**Data-analytics concepts shown here.**
+
+- *Event-level data → panel aggregation*. The raw data has one row
+  per event with timestamps; the panel needs one row per (country,
+  year). We `aggregate(... ~ iso3c + year, FUN = sum)` to compress.
+- *Per-capita thresholds, not absolute thresholds*. A 1,000-person
+  rally is country-defining in Iceland (0.26% of population) but
+  rounding-error in India (0.00007%). The right threshold for "large
+  protest" has to be **relative to population**, not absolute. We use
+  0.1% of population, calibrated against Iran's 2022 WLF baseline.
+- *ID system conversion*. MMP uses COW (Correlates of War) numeric
+  codes, not ISO-3. `cow_to_iso3()` in `_helpers.R` does the
+  conversion using `countrycode`.
+- *Schema-drift assertion*. The code asserts the expected MMP size
+  bucket names (`"1000-1999"`, `"2000-4999"`, etc.) match what's in
+  the downloaded file. If MMP changes their coding scheme, the
+  pipeline fails loudly rather than silently producing wrong results.
+
+**Domain terms used here.**
+
+- **MMP** — Mass Mobilization Project, Clark & Regan, Harvard
+  Dataverse. Hand-coded protest events 1990-2020.
+- **COW code** — Correlates of War country-numbering system.
+- **WLF** — Woman, Life, Freedom. Iran's 2022 protest movement, used
+  as the calibration baseline for "country-defining mobilization."
+
+**What success looks like.** The `mmp_annual` table has one row per
+(country, year) with three counts: total protests, large protests
+(per-capita threshold), and violent protests. The number that matters
+downstream is `n_large_protests` — used by `09_label_events.qmd` as a
+mobilization channel.
+:::
+
 Hand-coded large-protest events 1990–2020 from Clark & Regan's Mass
 Mobilization Project (Harvard Dataverse). Each row = one protest event with
 size, violence, and date fields. We aggregate to **country-year counts**:

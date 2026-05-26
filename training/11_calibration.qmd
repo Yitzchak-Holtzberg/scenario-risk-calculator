@@ -10,6 +10,62 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** A model with high accuracy on its training data is
+worthless if it doesn't generalize. This notebook evaluates the
+trained model on the **2023 holdout** — data the model never saw
+during fitting — and computes how well its predicted probabilities
+match observed outcomes. This is what tells us whether the model is
+actually useful.
+
+**Data-analytics concepts shown here.**
+
+- *Holdout evaluation*. The cardinal rule of predictive modeling.
+  Train on 1995-2022, test on 2023. Never let test data influence
+  model fitting in any way.
+- *Brier score*. A scoring rule for probabilistic forecasts.
+  Mathematically: average of `(predicted_prob - actual)²`. Lower is
+  better. Penalizes both over-confidence (predicting 0.9 when the
+  event doesn't happen) and under-confidence (predicting 0.1 when it
+  does).
+- *Brier skill score (BSS)*. `1 − (your Brier) / (baseline Brier)`,
+  where baseline = "always predict the base rate." Positive BSS =
+  your model beats the no-features baseline. Zero = your model is as
+  good as the baseline. Negative = worse than the baseline (your
+  model is actively misleading). v0.7.1's mobilization tier achieved
+  +0.022 — first time positive in the project's history.
+- *Reliability diagrams*. A plot showing whether predicted
+  probabilities match observed frequencies. If you predict 30% for
+  a bin of country-years, you want ~30% of them to actually have the
+  event. Deviations from the diagonal show miscalibration.
+- *Why probabilistic forecasts > point predictions*. A binary "yes/no"
+  forecast can't distinguish "I'm 51% confident" from "I'm 99%
+  confident." Probabilities communicate uncertainty. Brier scoring
+  rewards well-calibrated probabilities, not just correct binary calls.
+
+**Domain terms used here.**
+
+- **Brier score** — mean squared error of probabilities vs. binary
+  outcomes. Lower is better.
+- **Brier skill score (BSS)** — Brier score relative to a baseline.
+  Higher is better.
+- **Log loss / cross-entropy** — another probabilistic scoring rule.
+  Penalizes confident-and-wrong predictions more heavily than Brier.
+- **Reliability** (a.k.a. calibration) — does a "70% predicted"
+  actually fire 70% of the time? Strong models are well-calibrated.
+- **Resolution** — does the model discriminate between event and
+  non-event country-years? Trivially perfect calibration ("always
+  predict the base rate") has zero resolution.
+- **Holdout / test set** — data set aside, not used for training or
+  hyperparameter tuning, only used for final evaluation.
+
+**What success looks like.** A table with mobilization BSS and
+violence BSS, plus reliability diagrams that hopefully fall close to
+the 45-degree diagonal. v0.7.1 shipped with mobilization BSS = +0.022
+and violence BSS = +0.624 — published in the dashboard so users can
+judge the model honestly.
+:::
+
 Score the 2023 holdout for each tier (mobilization, violence) separately.
 Each tier gets its own Brier / log loss / reliability bins. The dashboard
 displays both calibration metrics so users can judge each prediction.

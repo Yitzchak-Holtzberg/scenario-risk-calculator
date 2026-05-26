@@ -10,6 +10,47 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** ViEWS (Violence & Impacts Early-Warning System) is
+a PRIO research project that publishes country-month conflict
+forecasts. They're a serious academic benchmark — published in
+peer-reviewed journals, with extensive validation. The dashboard
+shows their forecast alongside ours so users can compare. This
+notebook fetches ViEWS's latest predictions and writes them as a
+JSON overlay.
+
+**Data-analytics concepts shown here.**
+
+- *Benchmark against external models*. Your model isn't useful in
+  isolation; users want to know "how does it compare to the
+  state-of-the-art?" Showing a respected external benchmark in the
+  same UI is a sign of intellectual honesty.
+- *Independent refresh cadence*. ViEWS publishes monthly; we re-train
+  on a different schedule. This notebook is intentionally separate
+  from the model pipeline so the overlay can refresh without
+  re-rendering the whole pipeline.
+- *Adapter pattern for external APIs*. ViEWS publishes their forecasts
+  through a REST API with their own schema. We fetch, transform to
+  our country-iso3c convention, and write to a JSON shape the
+  dashboard understands. The dashboard never sees ViEWS's raw schema.
+
+**Domain terms used here.**
+
+- **ViEWS** — Violence & Impacts Early-Warning System, run by PRIO
+  (Peace Research Institute Oslo) and Uppsala. https://viewsforecasting.org
+- **PRIO** — Peace Research Institute Oslo. Major political-science
+  research organization.
+- **Country-month forecast** — a probability per (country, month).
+  Finer than our country-year predictions.
+- **State-based armed conflict ≥ 25/month** — ViEWS's outcome
+  definition. Slightly different from ours (we use ≥ 100/year).
+
+**What success looks like.** The `artifacts/views_overlay.json` file
+has one row per country with the next-12-month ViEWS forecast
+aggregated to annual probability. The dashboard reads it alongside
+our own predictions and displays a "ViEWS benchmark" row.
+:::
+
 Fetches the latest ViEWS country-month conflict forecast and writes
 `../artifacts/views_overlay.json` for the dashboard's "ViEWS" benchmark
 row. **Not** part of the model pipeline — runs independently so the

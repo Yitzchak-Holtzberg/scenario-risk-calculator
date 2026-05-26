@@ -10,6 +10,44 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** V-Dem (Varieties of Democracy) is the gold-standard
+expert-coded dataset of political institutions worldwide. It covers
+~200 countries from 1789 to present, with **4,618 variables per
+country-year**. We use a small subset (~10 variables) but load the
+whole thing so downstream queries are flexible.
+
+**Data-analytics concepts shown here.**
+
+- *Loading a complex domain dataset as-is*. We don't pre-filter at
+  load time — instead we land the full ~28K × ~4,600 table and let
+  downstream notebooks `SELECT` the columns they need. This trades
+  storage for flexibility.
+- *Trusting upstream packaging*. V-Dem ships as an R package
+  (`vdemdata`). Installing from GitHub via `remotes::install_github()`
+  is a common pattern for academic datasets that don't ship to CRAN.
+- *DuckDB as a working store*. We write to DuckDB rather than keeping
+  the data frame in memory. DuckDB handles wide tables (thousands of
+  columns) gracefully and lets us treat the data like a SQL warehouse.
+
+**Domain terms used here.**
+
+- **V-Dem** — Varieties of Democracy. https://v-dem.net
+- **`v2x_regime`** — V-Dem's "Regimes of the World" 4-category
+  classification (0=closed autocracy, 1=electoral autocracy,
+  2=electoral democracy, 3=liberal democracy).
+- **`v2x_civlib`** — civil liberties index (0-1 continuous).
+- **`v2cagenmob_ord`** — mass mobilization ordinal (0-4). One of our
+  outcome-label channels (≥4 means "mobilization was a defining
+  feature of the year").
+- **`v2caviol_ord`** — political violence ordinal (0-4).
+
+**What success looks like.** After this notebook runs, the `vdem`
+table in DuckDB has ~28,000 rows (countries × years) and 4,618
+columns. Notebook `00_load_countries.qmd` runs AFTER this one
+because it derives the country roster from V-Dem.
+:::
+
 Loads V-Dem v16 (~28K country-years × 4,618 variables) into the `vdem` table
 of `data/panel.duckdb`. Lands wide; downstream notebooks select variables.
 

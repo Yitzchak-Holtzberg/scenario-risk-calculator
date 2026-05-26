@@ -10,6 +10,44 @@ execute:
   message: false
 ---
 
+::: {.callout-note title="For students — what this notebook teaches"}
+**Why it exists.** Every other notebook in this project joins data on
+"the country." But different datasets identify countries differently
+(some use 3-letter ISO codes like `USA`, some use numeric codes like
+840, some use names like "United States of America" or "United States").
+Before we can join anything, we need ONE table that maps all these
+identifier systems to each other. That's what this notebook builds.
+
+**Data-analytics concepts shown here.**
+
+- *Master / reference tables*: one row per entity, all identifiers,
+  built first so downstream joins are clean.
+- *Identifier reconciliation*: real-world data uses competing ID
+  systems for the same things (ISO-3, COW, GW, V-Dem internal IDs).
+  Crosswalking them is unglamorous but essential.
+- *Honest handling of edge cases*: contested-sovereignty entities
+  (Kosovo, Palestine, Taiwan) aren't in standard ID systems. We patch
+  them in explicitly with a documented `patches` list rather than
+  silently dropping them.
+
+**Domain terms used here.**
+
+- **ISO 3166-1 alpha-3** — three-letter country code (USA, CUB, FRA).
+- **COW / Correlates of War code** — numeric code used by many
+  political-science datasets.
+- **Gleditsch-Ward (GW) code** — alternative numeric system used by
+  Pilster-Böhmelt and others.
+- **V-Dem country_id** — V-Dem's internal numbering.
+- **`countrycode`** — the R package that does the crosswalking; the
+  workhorse tool for this kind of task.
+
+**What success looks like.** The output is one DuckDB table named
+`countries` with ~200 rows. Every other loader joins on `iso3c`,
+which means this table determines the universe of countries the model
+can predict for. If your country of interest is missing from this
+table, fix it here.
+:::
+
 Builds the `countries` reference table that every downstream source joins
 through. One row per country with all the ID systems we need:
 

@@ -2,14 +2,37 @@
 # Shared utilities sourced from each .qmd's setup chunk:
 #   source("_helpers.R")
 #
+# ============================================================================
+# For students — what this file teaches
+# ============================================================================
+#
+# Why it exists.
+#   Every notebook needs the same handful of utilities: a consistent color
+#   palette, a consistent ggplot theme, and a one-liner for converting
+#   Correlates-of-War numeric codes to ISO-3 alpha. Rather than redefining
+#   them in 20 places (and inevitably drifting), we centralize them here.
+#
+# Data-analytics concepts shown.
+#   - Shared utilities / DRY (don't repeat yourself). Tiny helpers, used
+#     everywhere, defined in one place. Industry-standard practice.
+#   - Consistent visual identity across deliverables. Every plot in every
+#     notebook should "look like part of the same project." srs_theme()
+#     enforces this. The dashboard pulls the same color palette via CSS.
+#   - Naming conventions matter. We prefix utility names with `srs_`
+#     (Scenario Risk System) so they're greppable and don't collide with
+#     other R packages.
+#
+# What lives here.
+#   - srs_palette  : color constants matching the dashboard's parchment design
+#   - srs_theme()  : ggplot theme block used in every plot-bearing notebook
+#   - cow_to_iso3(): countrycode wrapper, COW numeric -> ISO3 alpha-3
+#   - srs_table()  : HTML table renderer with consistent formatting
+#
+# ============================================================================
+#
 # v0.4: z_within() and SRS_WINSORIZE_BOUND are gone — the model uses raw
 # cross-country feature levels. Notebooks that need to clip outliers do so
 # inline (see 08_build_panel.qmd for cpi_inflation clipping).
-#
-# Two things live here:
-#   - srs_palette  : color constants matching the dashboard
-#   - srs_theme()  : ggplot theme block used in every plot-bearing notebook
-#   - cow_to_iso3(): countrycode wrapper, COW numeric -> ISO3 alpha-3
 
 srs_palette <- list(
   parchment = "#F8F3E8",
