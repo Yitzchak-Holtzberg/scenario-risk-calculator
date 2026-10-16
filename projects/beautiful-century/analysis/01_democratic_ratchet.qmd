@@ -1,0 +1,193 @@
+---
+title: "01 — The democratic ratchet"
+subtitle: "Beautiful Century · test 3"
+format:
+  html:
+    theme: cosmo
+    toc: true
+execute:
+  warning: false
+  message: false
+---
+
+## Question
+
+Przeworski, Alvarez, Cheibub & Limongi (2000) found that no democracy above
+a certain income level (Argentina's 1975 level, roughly $6,000 in their
+1985 PPP dollars) had ever collapsed. If that still holds, then for rich
+countries democracy is a one-way door.
+
+This notebook asks the same question with V-Dem:
+
+1. Code democracy on the **electoral** definition only: V-Dem Regimes of the
+   World (`v2x_regime`) ≥ 2, i.e. electoral or liberal democracy. Rights
+   indices are not used to *define* democracy.
+2. Call a **breakdown** any year a country goes from democracy (year *t*) to
+   autocracy (year *t + 1*).
+3. Call a democracy **durable** if it has been continuously democratic for at
+   least `durable_years` years.
+4. Find the richest breakdown ever, overall and for durable democracies, and
+   the breakdown rate by income band.
+
+Units: V-Dem's `e_gdppc` comes from Fariss et al.'s latent-GDP estimates and
+is not in Przeworski's 1985 dollars, so the threshold here is found **from
+the data** (the richest breakdown observed), not by converting $6,000.
+
+> **Status:** first draft, not yet rendered against the full database.
+> Check the `e_gdppc` units line in the output before reading the numbers.
+
+## Setup
+
+```{r}
+#| label: setup
+library(DBI)
+library(duckdb)
+library(ggplot2)
+source("../../../pipelines/_helpers.R")
+
+# Tunable definitions — change these to stress-test the result.
+demo_threshold <- 2   # v2x_regime >= 2: electoral or liberal democracy
+durable_years  <- 20  # continuous democratic years before a breakdown "counts" as durable
+start_year     <- 1900
+
+con <- dbConnect(duckdb::duckdb(),
+                 dbdir = "../../../data/panel.duckdb", read_only = TRUE)
+```
+
+## Pull regime type and income
+
+```{r}
+#| label: pull
+vd <- dbGetQuery(con, sprintf("
+  SELECT country_text_id AS iso3c,
+         country_name,
+         year,
+         v2x_regime,
+         v2x_polyarchy,
+         e_gdppc
+  FROM vdem
+  WHERE year >= %d AND v2x_regime IS NOT NULL
+  ORDER BY iso3c, year
+", start_year))
+
+srs_table(data.frame(
+  rows      = nrow(vd),
+  countries = length(unique(vd$iso3c)),
+  first     = min(vd$year),
+  last      = max(vd$year),
+  gdppc_non_missing = sum(!is.na(vd$e_gdppc))
+), big_mark = TRUE)
+
+# Sanity check on units: print a few known values so the reader can see the scale.
+srs_table(subset(vd, iso3c %in% c("USA", "ARG", "IND") & year == 2000,
+                 select = c(country_name, year, e_gdppc)))
+```
+
+## Code democracy, spells, and breakdowns
+
+```{r}
+#| label: spells
+vd$democracy <- vd$v2x_regime >= demo_threshold
+
+# Run length of the current democratic spell (0 when not a democracy).
+vd <- do.call(rbind, lapply(split(vd, vd$iso3c), function(d) {
+  d <- d[order(d$year), ]
+  spell <- integer(nrow(d))
+  for (i in seq_len(nrow(d))) {
+    contiguous <- i > 1 && d$year[i] == d$year[i - 1] + 1
+    spell[i] <- if (!d$democracy[i]) 0L
+                else if (contiguous) spell[i - 1] + 1L
+                else 1L
+  }
+  d$spell_years <- spell
+  d$next_democracy <- c(d$democracy[-1], NA)
+  d$next_year      <- c(d$year[-1], NA)
+  d
+}))
+
+breakdowns <- subset(vd,
+  democracy & !is.na(next_democracy) & !next_democracy & next_year == year + 1)
+breakdowns$durable <- breakdowns$spell_years >= durable_years
+
+srs_table(data.frame(
+  democratic_country_years = sum(vd$democracy),
+  breakdowns               = nrow(breakdowns),
+  breakdowns_of_durable    = sum(breakdowns$durable)
+), big_mark = TRUE)
+```
+
+## Every breakdown, richest first
+
+```{r}
+#| label: list
+show <- breakdowns[order(-breakdowns$e_gdppc),
+                   c("country_name", "year", "spell_years", "e_gdppc", "durable")]
+srs_table(head(show, 40), digits = 2)
+```
+
+## The ratchet threshold
+
+```{r}
+#| label: threshold
+richest_any     <- show[which.max(show$e_gdppc), ]
+richest_durable <- subset(show, durable)
+richest_durable <- richest_durable[which.max(richest_durable$e_gdppc), ]
+
+srs_table(rbind(
+  cbind(type = "any democracy",     richest_any),
+  cbind(type = "durable democracy", richest_durable)
+), digits = 2)
+
+# How many democratic country-years sit above each threshold, and none broke down?
+above <- function(th) sum(vd$democracy & !is.na(vd$e_gdppc) & vd$e_gdppc > th)
+srs_table(data.frame(
+  threshold = c("richest breakdown (any)", "richest breakdown (durable)"),
+  value     = c(richest_any$e_gdppc, richest_durable$e_gdppc),
+  democratic_country_years_above = c(above(richest_any$e_gdppc),
+                                     above(richest_durable$e_gdppc))
+), digits = 2, big_mark = TRUE)
+```
+
+## Breakdown rate by income band
+
+```{r}
+#| label: rate-by-income
+demo_years <- subset(vd, democracy & !is.na(e_gdppc) & !is.na(next_democracy))
+demo_years$band <- cut(demo_years$e_gdppc,
+                       breaks = quantile(demo_years$e_gdppc, probs = seq(0, 1, 0.1)),
+                       include.lowest = TRUE, dig.lab = 4)
+demo_years$broke <- !demo_years$next_democracy & demo_years$next_year == demo_years$year + 1
+
+rates <- aggregate(broke ~ band, data = demo_years,
+                   FUN = function(x) c(n = length(x), breakdowns = sum(x), rate = mean(x)))
+rates <- data.frame(band = rates$band, rates$broke)
+srs_table(rates, digits = 4)
+
+ggplot(rates, aes(x = band, y = rate)) +
+  geom_col(fill = srs_palette$accent) +
+  labs(x = "GDP per capita decile (V-Dem e_gdppc)",
+       y = "Annual breakdown probability",
+       title = "Democratic breakdown risk by income decile",
+       caption = sprintf("Democracy = v2x_regime >= %d. Source: V-Dem.", demo_threshold)) +
+  srs_theme() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Robustness to check next
+
+- `demo_threshold <- 3` (liberal democracy only) vs. 2.
+- `durable_years` at 10 / 20 / 40.
+- Exclude occupation-driven breakdowns (1940 Western Europe), which are not
+  internal reversals.
+- Swap the income measure for WDI GDP per capita (post-1960) to see whether
+  the threshold survives a different GDP series.
+
+## Save
+
+```{r}
+#| label: save
+dbDisconnect(con, shutdown = TRUE)
+con_w <- dbConnect(duckdb::duckdb(), dbdir = "../../../data/panel.duckdb")
+dbWriteTable(con_w, "bc_democratic_breakdowns", breakdowns, overwrite = TRUE)
+dbDisconnect(con_w, shutdown = TRUE)
+```

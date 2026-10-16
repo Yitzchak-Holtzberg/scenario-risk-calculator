@@ -78,7 +78,8 @@ produces frozen artifacts.
 ```
 
 Each block in the diagram corresponds to one `.qmd` file (R + Quarto
-notebook) in the `training/` directory. The numbering is intentional —
+notebook): loaders `00`–`07` live in the shared `pipelines/` directory at the
+repo root; steps `08`–`13` live in this project's `analysis/` directory. The numbering is intentional —
 files in order produce a coherent pipeline. You can re-run any single
 notebook to refresh just that step.
 
@@ -209,16 +210,15 @@ install.packages(c("DBI", "duckdb", "ggplot2", "remotes", "WDI",
 remotes::install_github("vdeminstitute/vdemdata")
 ```
 
-Render notebooks in order (in a terminal at the project root):
+Render notebooks in order (in a terminal at the repo root). Loaders
+first, then this project's analysis steps:
 
 ```sh
-cd training
-quarto render 00_load_countries.qmd
-quarto render 01_load_vdem.qmd
-# ... through 12_export_artifacts.qmd
+cd pipelines
+quarto render                 # 00 → 07: shared loaders into data/panel.duckdb
+cd ../projects/scenario-risk-calculator/analysis
+quarto render                 # 08 → 13: panel, labels, fit, calibration, export
 ```
-
-Or render the whole pipeline at once: `cd training && quarto render`.
 
 Each `.qmd` produces an `.html` you can open in a browser to see the
 narrative, tables, and plots from that step.
@@ -227,7 +227,7 @@ narrative, tables, and plots from that step.
 
 If you're using this project to learn, here are good entry points:
 
-- **Add a new data source** — create `03g_load_yoursource.qmd`
+- **Add a new data source** — create `pipelines/03g_load_yoursource.qmd`
   following the pattern of `03c_load_coups.qmd` (it's the simplest).
   Then add a join in `08_build_panel.qmd` and an OR-channel in
   `09_label_events.qmd` if it's an outcome source.

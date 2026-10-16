@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'web/**'
-      - 'artifacts/**'
+      - 'projects/scenario-risk-calculator/web/**'
+      - 'projects/scenario-risk-calculator/artifacts/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
@@ -29,6 +29,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Sync artifacts/*.json into web/artifacts/
+        working-directory: projects/scenario-risk-calculator
         run: |
           mkdir -p web/artifacts
           cp artifacts/*.json web/artifacts/
@@ -40,7 +41,7 @@ jobs:
       - name: Upload web/ as Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./web
+          path: ./projects/scenario-risk-calculator/web
 
       - name: Deploy to GitHub Pages
         id: deployment

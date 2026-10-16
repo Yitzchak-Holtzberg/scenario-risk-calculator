@@ -87,13 +87,13 @@ library(jsonlite)
 
 ```{r}
 #| label: load
-fit             <- readRDS("../data/model/fit.rds")
+fit             <- readRDS("../model/fit.rds")
 tiers           <- fit$tiers
 features        <- fit$features
 regime_labels   <- fit$regime_labels
-calibration_obj <- readRDS("../data/model/calibration.rds")
+calibration_obj <- readRDS("../model/calibration.rds")
 
-con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+con <- dbConnect(duckdb::duckdb(), dbdir = "../../../data/panel.duckdb")
 panel <- dbGetQuery(con, "SELECT * FROM panel_labeled")
 dbDisconnect(con, shutdown = TRUE)
 ```
@@ -333,7 +333,7 @@ cat("Wrote artifacts/country_snapshot.json\n")
 ```{r}
 #| label: hanke-export
 hanke_raw <- dbGetQuery(
-  dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb", read_only = TRUE),
+  dbConnect(duckdb::duckdb(), dbdir = "../../../data/panel.duckdb", read_only = TRUE),
   "SELECT iso3c, year, cpi_inflation_hanke FROM hanke_inflation"
 )
 hanke_latest <- list()

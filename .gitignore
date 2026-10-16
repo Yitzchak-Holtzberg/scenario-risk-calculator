@@ -5,43 +5,47 @@ data/*.duckdb
 data/*.duckdb.wal
 *.csv
 *.parquet
-!artifacts/**/*.csv
-!artifacts/**/*.parquet
+!projects/*/artifacts/**/*.csv
+!projects/*/artifacts/**/*.parquet
 # Hand-curated supplement values (IMF inflation, Hanke estimates) - tracked
 !data/curated/**/*.csv
+# Project-specific hand-curated labels - tracked
+!projects/*/curated/**/*.csv
+# Project model outputs (fitted RDS etc.) - rebuildable
+projects/*/model/
 
-# --- Go (api/) -------------------------------------------------------------
-api/bin/
-api/*.exe
-api/*.test
-api/vendor/
+# --- Go (projects/*/api/) --------------------------------------------------
+projects/*/api/bin/
+projects/*/api/*.exe
+projects/*/api/*.test
+projects/*/api/vendor/
 
-# --- Node / SvelteKit (web/) -----------------------------------------------
-web/node_modules/
-web/.svelte-kit/
-web/build/
-web/.env
-web/.env.*
-!web/.env.example
-# Note: web/artifacts/ is committed (duplicate of top-level artifacts/) so
-# GitHub Pages can serve the dashboard as a self-contained directory.
-# After re-rendering 12_export_artifacts, copy artifacts/*.json -> web/artifacts/.
+# --- Node / SvelteKit (projects/*/web/) ------------------------------------
+projects/*/web/node_modules/
+projects/*/web/.svelte-kit/
+projects/*/web/build/
+projects/*/web/.env
+projects/*/web/.env.*
+!projects/*/web/.env.example
+# Note: projects/*/web/artifacts/ is committed (duplicate of the project's
+# artifacts/) so GitHub Pages can serve the dashboard as a self-contained dir.
+# 12_export_artifacts syncs artifacts/*.json -> web/artifacts/.
 
-# --- R (training/) ---------------------------------------------------------
-training/.Rhistory
-training/.RData
-training/.Ruserdata
-training/.Rproj.user/
-training/renv/library/
-training/renv/local/
-training/renv/staging/
-training/_freeze/
-training/_site/
-training/*.html
-!training/model-card-template.html
+# --- R + Quarto (pipelines/, projects/*/analysis/) -------------------------
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+renv/library/
+renv/local/
+renv/staging/
+_freeze/
+_site/
+pipelines/*.html
+projects/*/analysis/*.html
 # Quarto auto-generated sibling directories (per-doc libs, figures, cache)
-training/*_files/
-training/*_cache/
+*_files/
+*_cache/
 .Renviron
 *.Rcheck/
 

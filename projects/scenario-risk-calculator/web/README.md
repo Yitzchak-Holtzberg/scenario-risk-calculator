@@ -22,7 +22,7 @@ python -m http.server 8080
 # then open http://localhost:8080
 ```
 
-Refresh the page after re-running `training/12_export_artifacts.qmd` to pick
+Refresh the page after re-running `analysis/12_export_artifacts.qmd` to pick
 up new artifacts.
 
 ## Files it reads
@@ -36,7 +36,7 @@ The page reads JSON directly from `../artifacts/`:
 - `hanke_inflation.json` — Hanke-estimate inflation series for the optional dashboard toggle
 
 `weights.winsorize_bound` is the single source of truth for the z-score
-clip; `index.html::effectiveZValue` mirrors `training/_helpers.R::z_within`.
+clip; `index.html::effectiveZValue` mirrors `z_within` (removed in v0.4; formerly in `_helpers.R`).
 
 ## Deployment
 
