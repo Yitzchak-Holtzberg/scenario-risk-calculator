@@ -21,7 +21,7 @@ IMF Staff inflation estimates for countries where WDI is missing or
 unreliable. Sourced from IMF WEO October 2024 + Article IV consultations.
 Schema: `iso3c, year, cpi_inflation, source`.
 
-Used by [`08_build_panel.qmd`](../../training/08_build_panel.qmd) via
+Used by [`08_build_panel.qmd`](../../projects/scenario-risk-calculator/analysis/08_build_panel.qmd) via
 `COALESCE(wdi.cpi_inflation, imf.cpi_inflation)` — WDI wins where it has
 data, IMF backfills the gaps.
 
@@ -33,8 +33,8 @@ journalists cite when reporting "hyperinflation."
 Schema: `iso3c, year, cpi_inflation_hanke, source`.
 
 Loaded into the `hanke_inflation` DuckDB table by
-[`02b_load_inflation_supplements.qmd`](../../training/02b_load_inflation_supplements.qmd)
-and exported as `artifacts/hanke_inflation.json` for the dashboard's
+[`02b_load_inflation_supplements.qmd`](../../pipelines/02b_load_inflation_supplements.qmd)
+and exported as `projects/scenario-risk-calculator/artifacts/hanke_inflation.json` for the dashboard's
 "Inflation source" toggle.
 
 ## When to update

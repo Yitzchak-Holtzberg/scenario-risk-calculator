@@ -91,14 +91,14 @@ Output: `panel_features` table in `data/panel.duckdb`.
 library(DBI)
 library(duckdb)
 library(ggplot2)
-source("_helpers.R")  # srs_palette / srs_theme — z_within() is gone in v0.4
+source("../../../pipelines/_helpers.R")  # srs_palette / srs_theme — z_within() is gone in v0.4
 ```
 
 ## Open the panel db
 
 ```{r}
 #| label: connect
-con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+con <- dbConnect(duckdb::duckdb(), dbdir = "../../../data/panel.duckdb")
 ```
 
 ## Aggregate FAO to annual

@@ -1,14 +1,14 @@
 # data
 
-Raw sources and the DuckDB panel database. **Contents are gitignored** — too
-large to commit and licenses vary per source.
+Shared raw sources and the DuckDB database used by every project in this
+repo. **Contents are gitignored** (except `curated/`) — too large to commit and
+licenses vary per source.
 
 ```
 data/
 ├── raw/         # downloaded source files (V-Dem and WDI pulled via R packages, not stored here)
-├── model/       # fitted models + calibration metrics (RDS, written by training/10 + 11)
-├── curated/     # hand-curated reference files (committed)
-└── panel.duckdb # built incrementally by training/00–08 (~250 MB after full run)
+├── curated/     # hand-curated supplements used by the loaders (committed)
+└── panel.duckdb # loader tables from pipelines/00–07, plus project tables (~250 MB after full run)
 ```
 
 ## Raw sources
@@ -27,12 +27,13 @@ data/
 | `fao_food_price_indices.csv` | FAO Food Price Index | `05_load_fao.qmd` | Manual: fao.org/worldfoodsituation |
 | `pilster_bohmelt_coup_proofing.tab` | Pilster-Böhmelt counterbalancing | `06_load_pb.qmd` | Manual: Harvard Dataverse |
 | `debruin_ssf/` + `debruin_ssf.zip` | de Bruin State Security Forces | `07_load_debruin.qmd` | Manual: PRIO replication archive |
-| ⏳ *(pending)* | ACLED | (future `03_load_acled.qmd`) | API; Research-tier access applied 2026-05-15 |
+| `acled/regional/` | ACLED country-year aggregates | `03f_load_acled.qmd` | Manual: ACLED Aggregated Data export (no redistribution) |
 
 ## `panel.duckdb` tables
 
-Built incrementally — each loader writes one table; `08_build_panel.qmd`
-joins them; `09_label_events.qmd` adds outcome columns.
+Built incrementally. Each loader in `pipelines/` writes its own tables;
+projects then add their own derived tables (prefix them by project when
+adding new ones, e.g. `bc_` for beautiful-century, to avoid collisions).
 
 | Table | Written by | Grain |
 |---|---|---|
@@ -43,24 +44,26 @@ joins them; `09_label_events.qmd` adds outcome columns.
 | `mmp_annual` | 03a | (iso3c, year) |
 | `ucdp_annual` | 03b | (iso3c, year) |
 | `coups_annual` | 03c | (iso3c, year) |
-| `fariss` | 03d | (iso3c, year) |
-| `polity` | 03e | (iso3c, year) |
-| `unhcr` | 04 | (iso3c, year) |
+| `fariss_hr` | 03d | (iso3c, year) |
+| `polity5` | 03e | (iso3c, year) |
+| `unhcr`, `unhcr_inflow` | 04 | (iso3c, year) |
+| `acled_annual` | 03f | (iso3c, year) |
 | `fao` | 05 | (year, month) |
-| `fao_annual` | 08 | (year) |
+| `fao_annual` | scenario-risk-calculator/08 | (year) |
 | `pb_counterbalancing` | 06 | (iso3c, year) |
 | `security_forces` | 07 | (iso3c, year) |
-| `panel_features` | 08 | (iso3c, year) — joined panel with z-scored features |
-| `panel_labeled` | 09 | (iso3c, year) — `panel_features` + `unrest_next_year` |
+| `panel_features` | scenario-risk-calculator/08 | (iso3c, year) — joined model panel |
+| `panel_labeled` | scenario-risk-calculator/09 | (iso3c, year) — `panel_features` + outcome labels |
 
 ## Re-creating the data folder
 
-Render the training notebooks in numeric order from a fresh checkout. See
-[`../training/README.md`](../training/README.md) for the canonical pull order
-and which loaders need manual file downloads.
+Render the loaders in [`../pipelines/`](../pipelines/README.md) in numeric
+order from a fresh checkout (the table above lists the manual downloads).
+Fitted models now live with their project (e.g.
+`projects/scenario-risk-calculator/model/`), not in `data/model/`.
 
 ## `curated/`
 
-Small hand-maintained mapping files. Committed.
-
-- `prediction_market_mapping.csv` — maps prediction-market questions (Polymarket, Kalshi) to the model's country-year outcomes.
+Small hand-maintained supplement files used by the loaders. Committed. See
+[`curated/README.md`](curated/README.md). Project-specific curated files live
+under `projects/<name>/curated/`.

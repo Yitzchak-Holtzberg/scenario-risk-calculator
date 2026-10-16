@@ -19,7 +19,7 @@ carries `fitted_at`, `train_years`, and the `winsorize_bound` constant
 
 ## Refresh cadence
 
-Re-run `training/12_export_artifacts.qmd` after re-training and commit the
+Re-run `analysis/12_export_artifacts.qmd` after re-training and commit the
 JSON diff. Quarterly is a reasonable default; sooner when a new data source
 comes online or a calibration fix lands.
 

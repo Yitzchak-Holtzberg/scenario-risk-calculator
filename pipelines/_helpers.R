@@ -1,6 +1,7 @@
-# training/_helpers.R
+# pipelines/_helpers.R
 # Shared utilities sourced from each .qmd's setup chunk:
-#   source("_helpers.R")
+#   source("_helpers.R")                       (from pipelines/)
+#   source("../../../pipelines/_helpers.R")    (from projects/<name>/analysis/)
 #
 # ============================================================================
 # For students — what this file teaches

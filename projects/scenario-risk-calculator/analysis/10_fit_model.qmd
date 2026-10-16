@@ -69,7 +69,7 @@ persist the coefficients for the dashboard to use.
 - **Bootstrap** — resample the data with replacement, refit the model,
   see how much the estimates vary. Standard for non-parametric SEs.
 
-**What success looks like.** The `data/model/fit.rds` artifact stores
+**What success looks like.** The `model/fit.rds` artifact stores
 two tier dictionaries (mobilization, violence), each with a pooled
 fit, per-regime fits, coefficients, and bootstrap covariance.
 `11_calibration.qmd` then scores the held-out 2023 data and reports
@@ -148,7 +148,7 @@ library(glmnet)
 
 ```{r}
 #| label: pull
-con <- dbConnect(duckdb::duckdb(), dbdir = "../data/panel.duckdb")
+con <- dbConnect(duckdb::duckdb(), dbdir = "../../../data/panel.duckdb")
 
 features <- c(
   "civil_liberties", "log_gdp_per_cap", "loser_consent",
@@ -227,7 +227,7 @@ build_subsets <- function(outcome_col) {
   comp <- panel[fc & rc, ]
   # Manual-label rows ride along into training regardless of year — these are
   # ground-truth events whose canonical source hasn't published yet (see
-  # data/curated/manual_mobilization_labels.csv).
+  # projects/scenario-risk-calculator/curated/manual_mobilization_labels.csv).
   in_train <- comp$year <= 2022 | comp$manual_label == 1
   list(
     train   = comp[in_train, ],
@@ -478,7 +478,7 @@ loop over the tiers.
 
 ```{r}
 #| label: persist
-dir.create("../data/model", showWarnings = FALSE, recursive = TRUE)
+dir.create("../model", showWarnings = FALSE, recursive = TRUE)
 saveRDS(
   list(
     tiers = list(
@@ -491,8 +491,8 @@ saveRDS(
     n_bootstrap   = B_bootstrap,
     fitted_at     = Sys.time()
   ),
-  "../data/model/fit.rds"
+  "../model/fit.rds"
 )
-cat("Saved data/model/fit.rds with tiers: ",
+cat("Saved model/fit.rds with tiers: ",
     paste(c("mobilization", "violence"), collapse = ", "), "\n")
 ```
